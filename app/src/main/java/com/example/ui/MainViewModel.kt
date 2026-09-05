@@ -164,6 +164,7 @@ class MainViewModel(
 
     fun selectChatChannel(channelId: String) {
         _selectedChatChannel.value = channelId
+        repository.setActiveChannel(channelId)
     }
 
     fun openFriendSchedule(friend: FriendUser?) {
@@ -232,10 +233,21 @@ class MainViewModel(
         }
     }
 
-    fun addFriend(handle: String): Boolean {
+    suspend fun addFriend(handle: String): Boolean {
         val (success, message) = repository.addFriendByHandle(handle)
         _toastMessage.value = message
         return success
+    }
+
+    fun addFriendInBg(handle: String) {
+        viewModelScope.launch {
+            addFriend(handle)
+        }
+    }
+
+    fun syncWithCloud() {
+        repository.pushMyProfileToCloud(currentClassStatus.value)
+        _toastMessage.value = "Синхронизация с Firebase выполнена"
     }
 
     fun removeFriend(id: String) {

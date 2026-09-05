@@ -55,6 +55,7 @@ fun ProfileScreen(
     onLoadDemoSchedule: () -> Unit,
     onClearSchedule: () -> Unit,
     onClearChat: () -> Unit,
+    onSyncWithCloud: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -630,6 +631,101 @@ fun ProfileScreen(
                         text = "Активный статус",
                         style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
                     )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Cloud Firestore Status Card
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = BentoPrimaryContainer.copy(alpha = 0.5f)),
+            border = CardDefaults.outlinedCardBorder().copy(
+                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderContainer),
+                width = 1.dp
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = BentoPrimary,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDone,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Google Firebase",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = BentoPrimary
+                                )
+                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = BentoGreenContainer
+                            ) {
+                                Text(
+                                    text = "АКТИВНО",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BentoSuccessGreen
+                                    )
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Синхронизация друзей, пар и чата онлайн",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = BentoOnPrimaryContainer,
+                                fontSize = 11.sp
+                            )
+                        )
+                    }
+                }
+
+                FilledTonalButton(
+                    onClick = onSyncWithCloud,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = BentoPrimary,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Синхр.", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

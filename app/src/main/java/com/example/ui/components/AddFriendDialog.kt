@@ -2,6 +2,9 @@ package com.example.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -9,18 +12,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.ui.theme.BentoPrimary
+import kotlinx.coroutines.launch
 
 @Composable
 fun AddFriendDialog(
     onDismiss: () -> Unit,
-    onAddFriend: (String) -> Boolean
+    onAddFriend: suspend (String) -> Boolean
 ) {
     var inputQuery by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { if (!isLoading) onDismiss() }) {
         Card(
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -35,16 +42,27 @@ fun AddFriendDialog(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = "Добавить друга",
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = BentoPrimary
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Cloud,
+                        contentDescription = null,
+                        tint = BentoPrimary,
+                        modifier = Modifier.size(24.dp)
                     )
-                )
+                    Text(
+                        text = "Добавить друга",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = BentoPrimary
+                        )
+                    )
+                }
 
                 Text(
-                    text = "Введите университетский никнейм (@тег) друга, чтобы отслеживать его пары, аудитории и расписание.",
+                    text = "Введите @тег друга. Приложение найдёт его профиль и расписание в реальном времени через Google Firebase или каталог вуза.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -61,6 +79,7 @@ fun AddFriendDialog(
                         .fillMaxWidth()
                         .testTag("friend_query_input"),
                     singleLine = true,
+                    enabled = !isLoading,
                     shape = RoundedCornerShape(12.dp)
                 )
 
@@ -77,7 +96,10 @@ fun AddFriendDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isLoading
+                    ) {
                         Text("Отмена")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
@@ -87,18 +109,39 @@ fun AddFriendDialog(
                                 errorMessage = "Пожалуйста, введите никнейм друга"
                                 return@Button
                             }
-                            val added = onAddFriend(inputQuery.trim())
-                            if (added) {
-                                onDismiss()
-                            } else {
-                                errorMessage = "Друг уже в списке"
+                            isLoading = true
+                            scope.launch {
+                                val added = onAddFriend(inputQuery.trim())
+                                isLoading = false
+                                if (added) {
+                                    onDismiss()
+                                } else {
+                                    errorMessage = "Не удалось найти или уже в списке"
+                                }
                             }
                         },
+                        enabled = !isLoading,
                         colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.testTag("submit_add_friend_button")
                     ) {
-                        Text("Добавить")
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Поиск...")
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Найти")
+                        }
                     }
                 }
             }

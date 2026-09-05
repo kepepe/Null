@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
                                 onAddFriendClick = { showAddFriendDialog = true },
                                 onRemoveFriend = { viewModel.removeFriend(it) },
                                 onOpenRegisterDialog = { showRegisterDialog = true },
-                                onAddSuggestedFriend = { viewModel.addFriend(it) },
+                                onAddSuggestedFriend = { viewModel.addFriendInBg(it) },
                                 onViewSchedule = { friend ->
                                     viewModel.openFriendSchedule(friend)
                                 },
@@ -185,7 +185,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onLoadDemoSchedule = { viewModel.loadDemoSchedule() },
                                 onClearSchedule = { viewModel.clearSchedule() },
-                                onClearChat = { viewModel.clearChat() }
+                                onClearChat = { viewModel.clearChat() },
+                                onSyncWithCloud = { viewModel.syncWithCloud() }
                             )
                         }
                     }

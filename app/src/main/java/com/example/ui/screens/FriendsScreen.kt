@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MeetingRoom
@@ -22,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +50,7 @@ fun FriendsScreen(
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     val filteredFriends = remember(friends, searchQuery) {
         if (searchQuery.isBlank()) friends
@@ -182,6 +189,23 @@ fun FriendsScreen(
                                     )
                                 )
                             }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("My Handle", userProfile.handle)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Ваш тег ${userProfile.handle} скопирован для отправки друзьям!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Скопировать тег",
+                                tint = BentoPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     } else {
                         Column(modifier = Modifier.weight(1f)) {
