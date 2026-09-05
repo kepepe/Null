@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Center 66dp container: (x: 21 to 87, y: 21 to 87) -->
+    <!-- Outer Bento Grid Card Container -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,26h40c5.5,0 10,4.5 10,10v36c0,5.5 -4.5,10 -10,10h-40c-5.5,0 -10,-4.5 -10,-10v-36c0,-5.5 4.5,-10 10,-10z" />
+    <!-- Header bar with calendar pins -->
+    <path
+        android:fillColor="#D3E4FF"
+        android:pathData="M24,36c0,-5.5 4.5,-10 10,-10h40c5.5,0 10,4.5 10,10v8h-60v-8z" />
+    <path
+        android:fillColor="#0061A4"
+        android:pathData="M36,22h4v8h-4z M68,22h4v8h-4z" />
+    <!-- Bento tiles inside the calendar -->
+    <!-- Active Tile Left -->
+    <path
+        android:fillColor="#0061A4"
+        android:pathData="M30,48h20c2.2,0 4,1.8 4,4v24c0,2.2 -1.8,4 -4,4h-20c-2.2,0 -4,-1.8 -4,-4v-24c0,-2.2 1.8,-4 4,-4z" />
+    <!-- Mini clock hands inside active tile -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,56c-4.4,0 -8,3.6 -8,8s3.6,8 8,8s8,-3.6 8,-8s-3.6,-8 -8,-8z M42,60c0.55,0 1,0.45 1,1v3.4l2.5,1.5c0.4,0.25 0.55,0.75 0.3,1.15c-0.25,0.4 -0.75,0.55 -1.15,0.3l-3,-1.8c-0.4,-0.25 -0.65,-0.7 -0.65,-1.15v-3.4c0,-0.55 0.45,-1 1,-1z" />
+    <!-- Tile Top Right (Friends/Book) -->
+    <path
+        android:fillColor="#EADDFF"
+        android:pathData="M58,48h18c2.2,0 4,1.8 4,4v10c0,2.2 -1.8,4 -4,4h-18c-2.2,0 -4,-1.8 -4,-4v-10c0,-2.2 1.8,-4 4,-4z" />
+    <!-- Tile Bottom Right (Next Up) -->
+    <path
+        android:fillColor="#D3E4FF"
+        android:pathData="M58,68h18c2.2,0 4,1.8 4,4v4c0,2.2 -1.8,4 -4,4h-18c-2.2,0 -4,-1.8 -4,-4v-4c0,-2.2 1.8,-4 4,-4z" />
+</vector>
