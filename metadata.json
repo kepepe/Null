@@ -1,6 +1,6 @@
 {
-  "name": "null",
-  "description": "Bento grid university schedule manager and real-time friend class locator.",
+  "name": "StudySync",
+  "description": "Bento grid university schedule manager, bell schedule, attendance tracker, and real-time friend class locator.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

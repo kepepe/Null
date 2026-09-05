@@ -1,23 +1,30 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.model.ClassSlot
-import com.example.model.ClassType
-import com.example.model.WeekParity
+import com.example.model.*
 import com.example.ui.theme.BentoPrimary
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -45,6 +52,9 @@ fun AddEditClassDialog(
         mutableStateOf(initialSlot?.endTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "11:30")
     }
     var weekParity by remember { mutableStateOf(initialSlot?.weekParity ?: WeekParity.ALL) }
+    var selectedColorHex by remember {
+        mutableStateOf(initialSlot?.colorHex ?: subjectColorPalette.first().first)
+    }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -206,6 +216,77 @@ fun AddEditClassDialog(
                     )
                 }
 
+                // Bell Schedule Quick-Select (Звонки и перемены)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "🔔 Быстрый выбор по сетке звонков",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(standardBellSchedule) { bell ->
+                            SuggestionChip(
+                                onClick = {
+                                    val fmt = DateTimeFormatter.ofPattern("HH:mm")
+                                    startTimeText = bell.startTime.format(fmt)
+                                    endTimeText = bell.endTime.format(fmt)
+                                },
+                                label = {
+                                    Text(
+                                        text = "${bell.pairNumber} пара (${bell.formattedTimeSpan})",
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Subject Color Tag (Цветовые теги для предметов)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "🎨 Цветовой тег предмета",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(subjectColorPalette) { (hex, title) ->
+                            val color = Color(android.graphics.Color.parseColor(hex))
+                            val isSelected = selectedColorHex.equals(hex, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { selectedColorHex = hex },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Выбран цвет $title",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Alternating Week Parity
                 Text(
                     text = "Периодичность (Чётная / Нечётная)",
@@ -272,7 +353,7 @@ fun AddEditClassDialog(
                                 startTime = parsedStart,
                                 endTime = parsedEnd,
                                 weekParity = weekParity,
-                                colorHex = initialSlot?.colorHex ?: "#0061A4"
+                                colorHex = selectedColorHex
                             )
                             onSave(slot)
                             onDismiss()

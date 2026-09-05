@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "null"
+rootProject.name = "StudySync"
 
 include(":app")

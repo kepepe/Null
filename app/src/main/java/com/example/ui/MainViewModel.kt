@@ -57,6 +57,20 @@ class MainViewModel(
             initialValue = emptyList()
         )
 
+    val groupChats: StateFlow<List<GroupChat>> = repository.groupChatsFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val attendanceMap: StateFlow<Map<String, AttendanceStatus>> = repository.attendanceFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyMap()
+        )
+
     private val _currentTab = MutableStateFlow(0)
     val currentTab: StateFlow<Int> = _currentTab.asStateFlow()
 
@@ -66,7 +80,7 @@ class MainViewModel(
     private val _selectedParityFilter = MutableStateFlow(WeekParity.ALL)
     val selectedParityFilter: StateFlow<WeekParity> = _selectedParityFilter.asStateFlow()
 
-    private val _selectedChatChannel = MutableStateFlow("group_chat")
+    private val _selectedChatChannel = MutableStateFlow("")
     val selectedChatChannel: StateFlow<String> = _selectedChatChannel.asStateFlow()
 
     private val _viewingFriendSchedule = MutableStateFlow<FriendUser?>(null)
@@ -163,6 +177,31 @@ class MainViewModel(
 
     fun sendMessage(channelId: String, text: String) {
         repository.sendMessage(channelId, text)
+    }
+
+    fun createGroupChat(name: String, memberFriendIds: List<String>) {
+        val group = repository.createGroupChat(name, memberFriendIds)
+        _selectedChatChannel.value = group.id
+        _toastMessage.value = "Группа «${group.name}» создана"
+    }
+
+    fun deleteGroupChat(groupId: String) {
+        repository.deleteGroupChat(groupId)
+        if (_selectedChatChannel.value == groupId) {
+            _selectedChatChannel.value = ""
+        }
+        _toastMessage.value = "Групповой чат удалён"
+    }
+
+    fun setAttendance(classId: String, date: LocalDate, status: AttendanceStatus) {
+        val dateStr = date.toString()
+        repository.setAttendance(classId, dateStr, status)
+    }
+
+    fun shareScheduleToChat(channelId: String, classes: List<ClassSlot>, title: String) {
+        val text = repository.formatScheduleForSharing(classes, title)
+        repository.sendMessage(channelId, text)
+        _toastMessage.value = "Расписание отправлено в чат"
     }
 
     fun saveClass(slot: ClassSlot) {

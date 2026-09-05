@@ -69,6 +69,62 @@ data class ClassSlot(
         }
 }
 
+data class GroupChat(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val name: String,
+    val memberFriendIds: List<String> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+enum class AttendanceStatus(val displayName: String, val shortName: String, val colorHex: String) {
+    ATTENDED("Присутствовал", "Был", "#2E7D32"),
+    MISSED("Пропуск", "Пропуск", "#C62828"),
+    EXCUSED("Уважительная", "Уваж.", "#E65100"),
+    NOT_MARKED("Не отмечено", "—", "#757575")
+}
+
+data class AttendanceRecord(
+    val classId: String,
+    val dateString: String,
+    val status: AttendanceStatus
+)
+
+data class BellSlot(
+    val pairNumber: Int,
+    val startTime: LocalTime,
+    val endTime: LocalTime,
+    val breakAfterMinutes: Int,
+    val breakDescription: String = if (breakAfterMinutes > 0) "Перемена $breakAfterMinutes мин" else "Конец занятий"
+) {
+    val formattedTimeSpan: String
+        get() {
+            val formatter = DateTimeFormatter.ofPattern("HH:mm")
+            return "${startTime.format(formatter)} - ${endTime.format(formatter)}"
+        }
+}
+
+val standardBellSchedule = listOf(
+    BellSlot(1, LocalTime.of(8, 0), LocalTime.of(9, 35), 15, "Перемена 15 минут"),
+    BellSlot(2, LocalTime.of(9, 50), LocalTime.of(11, 25), 15, "Перемена 15 минут"),
+    BellSlot(3, LocalTime.of(11, 40), LocalTime.of(13, 15), 45, "Большая перемена 45 минут (обед)"),
+    BellSlot(4, LocalTime.of(14, 0), LocalTime.of(15, 35), 15, "Перемена 15 минут"),
+    BellSlot(5, LocalTime.of(15, 50), LocalTime.of(17, 25), 15, "Перемена 15 минут"),
+    BellSlot(6, LocalTime.of(17, 40), LocalTime.of(19, 15), 0, "Конец занятий")
+)
+
+val subjectColorPalette = listOf(
+    "#0061A4" to "Синий",
+    "#6750A4" to "Фиолетовый",
+    "#2E7D32" to "Зелёный",
+    "#E65100" to "Оранжевый",
+    "#C2185B" to "Розовый",
+    "#00838F" to "Морской",
+    "#303F9F" to "Индиго",
+    "#D32F2F" to "Красный",
+    "#5D4037" to "Коричневый",
+    "#455A64" to "Графит"
+)
+
 data class FriendUser(
     val id: String,
     val displayName: String,

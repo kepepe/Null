@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
                 val allClasses by viewModel.allClasses.collectAsStateWithLifecycle()
                 val friends by viewModel.friends.collectAsStateWithLifecycle()
                 val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
+                val groupChats by viewModel.groupChats.collectAsStateWithLifecycle()
+                val attendanceMap by viewModel.attendanceMap.collectAsStateWithLifecycle()
                 val selectedChatChannel by viewModel.selectedChatChannel.collectAsStateWithLifecycle()
                 val viewingFriendSchedule by viewModel.viewingFriendSchedule.collectAsStateWithLifecycle()
                 val selectedDay by viewModel.selectedTimetableDay.collectAsStateWithLifecycle()
@@ -107,6 +109,9 @@ class MainActivity : ComponentActivity() {
                                 allClasses = allClasses,
                                 selectedDay = selectedDay,
                                 selectedParity = selectedParity,
+                                attendanceMap = attendanceMap,
+                                friends = friends,
+                                groupChats = groupChats,
                                 onSelectDay = { viewModel.selectTimetableDay(it) },
                                 onSelectParity = { viewModel.selectParityFilter(it) },
                                 onEditClass = { slot ->
@@ -116,6 +121,12 @@ class MainActivity : ComponentActivity() {
                                 onAddNewClass = {
                                     editingSlot = null
                                     showAddEditDialog = true
+                                },
+                                onSetAttendance = { classId, date, status ->
+                                    viewModel.setAttendance(classId, date, status)
+                                },
+                                onShareSchedule = { channelId, classes, title ->
+                                    viewModel.shareScheduleToChat(channelId, classes, title)
                                 }
                             )
 
@@ -138,16 +149,24 @@ class MainActivity : ComponentActivity() {
                                 currentChannelId = selectedChatChannel,
                                 chatMessages = chatMessages,
                                 friends = friends,
+                                groupChats = groupChats,
                                 userProfile = userProfile,
                                 onSelectChannel = { viewModel.selectChatChannel(it) },
                                 onSendMessage = { channelId, text ->
                                     viewModel.sendMessage(channelId, text)
+                                },
+                                onCreateGroupChat = { name, members ->
+                                    viewModel.createGroupChat(name, members)
+                                },
+                                onDeleteGroupChat = { groupId ->
+                                    viewModel.deleteGroupChat(groupId)
                                 }
                             )
 
                             4 -> ProfileScreen(
                                 userProfile = userProfile,
                                 totalClasses = allClasses.size,
+                                currentStatus = currentStatus,
                                 onOpenRegisterDialog = { showRegisterDialog = true },
                                 onUpdateAvatar = { uri ->
                                     viewModel.updateUserAvatar(uri)

@@ -99,6 +99,8 @@ val BentoOnPurpleContainer: Color @Composable get() = LocalBentoPalette.current.
 
 val BentoCoralContainer: Color @Composable get() = LocalBentoPalette.current.coralContainer
 val BentoOnCoralContainer: Color @Composable get() = LocalBentoPalette.current.onCoralContainer
+val BentoCoral: Color @Composable get() = if (LocalBentoPalette.current.isDark) Color(0xFFFFB4AB) else Color(0xFFBA1A1A)
 
 val BentoSuccessGreen: Color @Composable get() = LocalBentoPalette.current.successGreen
 val BentoGreenContainer: Color @Composable get() = LocalBentoPalette.current.greenContainer
+

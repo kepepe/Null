@@ -30,29 +30,37 @@ class ScheduleRepository(
     private val _chatMessagesFlow = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessagesFlow: Flow<List<ChatMessage>> = _chatMessagesFlow.asStateFlow()
 
+    // Custom Group Chats created with friends
+    private val _groupChatsFlow = MutableStateFlow<List<GroupChat>>(loadGroupChats())
+    val groupChatsFlow: Flow<List<GroupChat>> = _groupChatsFlow.asStateFlow()
+
+    // Attendance map: key is "${classId}_${dateString}", value is AttendanceStatus
+    private val _attendanceFlow = MutableStateFlow<Map<String, AttendanceStatus>>(loadAttendance())
+    val attendanceFlow: Flow<Map<String, AttendanceStatus>> = _attendanceFlow.asStateFlow()
+
     // Sample schedules for directory friends
     private val alexSchedule = listOf(
-        ClassSlot("as1", "Алгоритмы и структуры данных", ClassType.LECTURE, "проф. Соколов А.В.", "Ауд. 412", DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 30)),
-        ClassSlot("as2", "Архитектура ЭВМ", ClassType.SEMINAR, "доц. Громов В.С.", "Ауд. 305", DayOfWeek.MONDAY, LocalTime.of(10, 45), LocalTime.of(12, 15)),
-        ClassSlot("as3", "Дискретная математика", ClassType.LECTURE, "доц. Петрова Е.И.", "Зал 201", DayOfWeek.TUESDAY, LocalTime.of(11, 0), LocalTime.of(12, 30)),
-        ClassSlot("as4", "Разработка на Kotlin / Compose", ClassType.LAB, "преп. Васильев И.Д.", "Лаб. 4", DayOfWeek.WEDNESDAY, LocalTime.of(9, 0), LocalTime.of(12, 0)),
-        ClassSlot("as5", "Операционные системы", ClassType.LECTURE, "проф. Ильин Д.А.", "Ауд. 108", DayOfWeek.THURSDAY, LocalTime.of(13, 0), LocalTime.of(14, 30)),
-        ClassSlot("as6", "Английский язык в IT", ClassType.PRACTICUM, "преп. Смит М.В.", "Ауд. 510", DayOfWeek.FRIDAY, LocalTime.of(10, 0), LocalTime.of(11, 30))
+        ClassSlot("as1", "Алгоритмы и структуры данных", ClassType.LECTURE, "проф. Соколов А.В.", "Ауд. 412", DayOfWeek.MONDAY, LocalTime.of(8, 0), LocalTime.of(9, 35), colorHex = "#0061A4"),
+        ClassSlot("as2", "Архитектура ЭВМ", ClassType.SEMINAR, "доц. Громов В.С.", "Ауд. 305", DayOfWeek.MONDAY, LocalTime.of(9, 50), LocalTime.of(11, 25), colorHex = "#6750A4"),
+        ClassSlot("as3", "Дискретная математика", ClassType.LECTURE, "доц. Петрова Е.И.", "Зал 201", DayOfWeek.TUESDAY, LocalTime.of(11, 40), LocalTime.of(13, 15), colorHex = "#2E7D32"),
+        ClassSlot("as4", "Разработка на Kotlin / Compose", ClassType.LAB, "преп. Васильев И.Д.", "Лаб. 4", DayOfWeek.WEDNESDAY, LocalTime.of(8, 0), LocalTime.of(9, 35), colorHex = "#E65100"),
+        ClassSlot("as5", "Операционные системы", ClassType.LECTURE, "проф. Ильин Д.А.", "Ауд. 108", DayOfWeek.THURSDAY, LocalTime.of(14, 0), LocalTime.of(15, 35), colorHex = "#C2185B"),
+        ClassSlot("as6", "Английский язык в IT", ClassType.PRACTICUM, "преп. Смит М.В.", "Ауд. 510", DayOfWeek.FRIDAY, LocalTime.of(9, 50), LocalTime.of(11, 25), colorHex = "#00838F")
     )
 
     private val mariaSchedule = listOf(
-        ClassSlot("ms1", "Математический анализ", ClassType.LECTURE, "проф. Ковалева Н.Н.", "Зал 101", DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 30)),
-        ClassSlot("ms2", "Линейная алгебра", ClassType.SEMINAR, "доц. Кузнецов П.А.", "Ауд. 218", DayOfWeek.MONDAY, LocalTime.of(10, 45), LocalTime.of(12, 15)),
-        ClassSlot("ms3", "Теория вероятностей", ClassType.LECTURE, "проф. Сорокин Б.А.", "Ауд. 312", DayOfWeek.WEDNESDAY, LocalTime.of(11, 0), LocalTime.of(12, 30)),
-        ClassSlot("ms4", "Экономика IT-проектов", ClassType.SEMINAR, "доц. Белова О.В.", "Ауд. 405", DayOfWeek.THURSDAY, LocalTime.of(10, 0), LocalTime.of(11, 30)),
-        ClassSlot("ms5", "Философия науки", ClassType.LECTURE, "проф. Волков С.М.", "Зал 300", DayOfWeek.FRIDAY, LocalTime.of(12, 0), LocalTime.of(13, 30))
+        ClassSlot("ms1", "Математический анализ", ClassType.LECTURE, "проф. Ковалева Н.Н.", "Зал 101", DayOfWeek.MONDAY, LocalTime.of(8, 0), LocalTime.of(9, 35), colorHex = "#6750A4"),
+        ClassSlot("ms2", "Линейная алгебра", ClassType.SEMINAR, "доц. Кузнецов П.А.", "Ауд. 218", DayOfWeek.MONDAY, LocalTime.of(9, 50), LocalTime.of(11, 25), colorHex = "#303F9F"),
+        ClassSlot("ms3", "Теория вероятностей", ClassType.LECTURE, "проф. Сорокин Б.А.", "Ауд. 312", DayOfWeek.WEDNESDAY, LocalTime.of(11, 40), LocalTime.of(13, 15), colorHex = "#0061A4"),
+        ClassSlot("ms4", "Экономика IT-проектов", ClassType.SEMINAR, "доц. Белова О.В.", "Ауд. 405", DayOfWeek.THURSDAY, LocalTime.of(9, 50), LocalTime.of(11, 25), colorHex = "#2E7D32"),
+        ClassSlot("ms5", "Философия науки", ClassType.LECTURE, "проф. Волков С.М.", "Зал 300", DayOfWeek.FRIDAY, LocalTime.of(11, 40), LocalTime.of(13, 15), colorHex = "#E65100")
     )
 
     private val daniilSchedule = listOf(
-        ClassSlot("ds1", "Базы данных (SQL / NoSQL)", ClassType.LAB, "преп. Васильев И.Д.", "Лаб. 3В", DayOfWeek.MONDAY, LocalTime.of(11, 30), LocalTime.of(13, 0)),
-        ClassSlot("ds2", "Компьютерные сети", ClassType.LECTURE, "доц. Смирнов А.А.", "Ауд. 204", DayOfWeek.TUESDAY, LocalTime.of(9, 0), LocalTime.of(10, 30)),
-        ClassSlot("ds3", "Информационная безопасность", ClassType.SEMINAR, "проф. Романов К.В.", "Ауд. 411", DayOfWeek.THURSDAY, LocalTime.of(12, 0), LocalTime.of(13, 30)),
-        ClassSlot("ds4", "Web-разработка", ClassType.PRACTICUM, "преп. Чернов Д.И.", "Лаб. 2", DayOfWeek.FRIDAY, LocalTime.of(14, 0), LocalTime.of(15, 30))
+        ClassSlot("ds1", "Базы данных (SQL / NoSQL)", ClassType.LAB, "преп. Васильев И.Д.", "Лаб. 3В", DayOfWeek.MONDAY, LocalTime.of(11, 40), LocalTime.of(13, 15), colorHex = "#00838F"),
+        ClassSlot("ds2", "Компьютерные сети", ClassType.LECTURE, "доц. Смирнов А.А.", "Ауд. 204", DayOfWeek.TUESDAY, LocalTime.of(8, 0), LocalTime.of(9, 35), colorHex = "#0061A4"),
+        ClassSlot("ds3", "Информационная безопасность", ClassType.SEMINAR, "проф. Романов К.В.", "Ауд. 411", DayOfWeek.THURSDAY, LocalTime.of(11, 40), LocalTime.of(13, 15), colorHex = "#D32F2F"),
+        ClassSlot("ds4", "Web-разработка", ClassType.PRACTICUM, "преп. Чернов Д.И.", "Лаб. 2", DayOfWeek.FRIDAY, LocalTime.of(14, 0), LocalTime.of(15, 35), colorHex = "#6750A4")
     )
 
     // Public campus directory to discover friends by handle / tag
@@ -65,7 +73,7 @@ class ScheduleRepository(
             avatarBgColorHex = "#0061A4",
             currentClass = "Алгоритмы и структуры данных",
             currentRoom = "Ауд. 412",
-            classEndTime = "11:45",
+            classEndTime = "09:35",
             isAttendingClass = true,
             schedule = alexSchedule
         ),
@@ -77,7 +85,7 @@ class ScheduleRepository(
             avatarBgColorHex = "#6750A4",
             currentClass = "Математический анализ",
             currentRoom = "Зал 101",
-            classEndTime = "12:15",
+            classEndTime = "11:25",
             isAttendingClass = true,
             schedule = mariaSchedule
         ),
@@ -89,7 +97,7 @@ class ScheduleRepository(
             avatarBgColorHex = "#7D5260",
             currentClass = "Базы данных (Лаб)",
             currentRoom = "Лаб. 3В",
-            classEndTime = "13:00",
+            classEndTime = "13:15",
             isAttendingClass = true,
             schedule = daniilSchedule
         ),
@@ -101,7 +109,7 @@ class ScheduleRepository(
             avatarBgColorHex = "#386A20",
             currentClass = "Философия",
             currentRoom = "Зал 300",
-            classEndTime = "14:00",
+            classEndTime = "15:35",
             isAttendingClass = false,
             schedule = emptyList()
         ),
@@ -113,7 +121,7 @@ class ScheduleRepository(
             avatarBgColorHex = "#006874",
             currentClass = "Компьютерные сети",
             currentRoom = "Ауд. 204",
-            classEndTime = "10:30",
+            classEndTime = "09:35",
             isAttendingClass = true,
             schedule = daniilSchedule
         )
@@ -268,6 +276,92 @@ class ScheduleRepository(
         _chatMessagesFlow.value = emptyList()
     }
 
+    // --- Custom Group Chats Persistence & Operations ---
+    private fun loadGroupChats(): List<GroupChat> {
+        val raw = prefs.getString("custom_group_chats", null) ?: return emptyList()
+        return raw.split(";;;").mapNotNull { groupStr ->
+            val parts = groupStr.split("|||")
+            if (parts.size >= 3) {
+                val id = parts[0]
+                val name = parts[1]
+                val members = parts[2].split(",").filter { it.isNotBlank() }
+                GroupChat(id = id, name = name, memberFriendIds = members)
+            } else null
+        }
+    }
+
+    private fun saveGroupChats(groups: List<GroupChat>) {
+        val serialized = groups.joinToString(";;;") { group ->
+            "${group.id}|||${group.name}|||${group.memberFriendIds.joinToString(",")}"
+        }
+        prefs.edit().putString("custom_group_chats", serialized).apply()
+    }
+
+    fun createGroupChat(name: String, memberFriendIds: List<String>): GroupChat {
+        val newGroup = GroupChat(
+            id = "grp_" + UUID.randomUUID().toString().take(8),
+            name = name.trim(),
+            memberFriendIds = memberFriendIds
+        )
+        val updated = _groupChatsFlow.value + newGroup
+        _groupChatsFlow.value = updated
+        saveGroupChats(updated)
+        return newGroup
+    }
+
+    fun deleteGroupChat(groupId: String) {
+        val updated = _groupChatsFlow.value.filterNot { it.id == groupId }
+        _groupChatsFlow.value = updated
+        saveGroupChats(updated)
+        // Also remove messages belonging to this group chat
+        _chatMessagesFlow.value = _chatMessagesFlow.value.filterNot { it.channelId == groupId }
+    }
+
+    // --- Attendance Persistence & Operations ---
+    private fun loadAttendance(): Map<String, AttendanceStatus> {
+        val raw = prefs.getString("attendance_records", null) ?: return emptyMap()
+        val result = mutableMapOf<String, AttendanceStatus>()
+        raw.split(";").forEach { item ->
+            val parts = item.split(":")
+            if (parts.size == 2) {
+                val key = parts[0]
+                val status = runCatching { AttendanceStatus.valueOf(parts[1]) }.getOrNull()
+                if (status != null) {
+                    result[key] = status
+                }
+            }
+        }
+        return result
+    }
+
+    private fun saveAttendance(map: Map<String, AttendanceStatus>) {
+        val serialized = map.entries.joinToString(";") { "${it.key}:${it.value.name}" }
+        prefs.edit().putString("attendance_records", serialized).apply()
+    }
+
+    fun setAttendance(classId: String, dateString: String, status: AttendanceStatus) {
+        val key = "${classId}_$dateString"
+        val current = _attendanceFlow.value.toMutableMap()
+        if (status == AttendanceStatus.NOT_MARKED) {
+            current.remove(key)
+        } else {
+            current[key] = status
+        }
+        _attendanceFlow.value = current
+        saveAttendance(current)
+    }
+
+    fun formatScheduleForSharing(classes: List<ClassSlot>, headerTitle: String): String {
+        if (classes.isEmpty()) {
+            return "📅 $headerTitle: Пар нет, день свободен! ✨"
+        }
+        val builder = StringBuilder("📅 $headerTitle:\n")
+        classes.sortedBy { it.startTime }.forEachIndexed { index, slot ->
+            builder.append("${index + 1}. ${slot.formattedTimeSpan} • ${slot.subjectTitle} (${slot.classroom})\n")
+        }
+        return builder.toString().trimEnd()
+    }
+
     // Optional demo loader if user wants to see sample schedule
     suspend fun loadDemoSchedule() {
         val now = LocalTime.now()
@@ -308,8 +402,8 @@ class ScheduleRepository(
                 professor = "преп. Васильев И.Д.",
                 classroom = "Компьютерный класс 3",
                 dayOfWeek = DayOfWeek.TUESDAY,
-                startTime = LocalTime.of(10, 0),
-                endTime = LocalTime.of(11, 30),
+                startTime = LocalTime.of(9, 50),
+                endTime = LocalTime.of(11, 25),
                 weekParity = WeekParity.EVEN,
                 colorHex = "#006874"
             )

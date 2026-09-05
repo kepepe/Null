@@ -143,41 +143,105 @@ fun DashboardScreen(
                 }
             }
 
-            // User Profile Avatar Button (Enlarged)
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(if (userProfile.isRegistered) BentoPrimary else BentoSurfaceVariant)
-                    .border(2.dp, BentoBorderLight, CircleShape)
-                    .shadow(elevation = 3.dp, shape = CircleShape)
-                    .clickable(onClick = onOpenProfile)
-                    .testTag("profile_avatar_button"),
-                contentAlignment = Alignment.Center
+            // User Profile Avatar & Live Status Badge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (userProfile.avatarUri != null) {
-                    AsyncImage(
-                        model = userProfile.avatarUri,
-                        contentDescription = "Аватар профиля",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                val (statusText, statusFg, statusBg) = when (currentStatus) {
+                    is CurrentClassStatus.ActiveClass -> Triple(
+                        "На паре (${currentStatus.currentSlot.formattedTimeSpan})",
+                        BentoSuccessGreen,
+                        BentoGreenContainer
                     )
-                } else if (userProfile.isRegistered && userProfile.initials.isNotBlank()) {
-                    Text(
-                        text = userProfile.initials,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = BentoOnPrimary,
-                            fontSize = 16.sp
+                    is CurrentClassStatus.FreePeriod -> Triple(
+                        "Перемена",
+                        BentoCoral,
+                        BentoCoralContainer
+                    )
+                    is CurrentClassStatus.DoneForToday -> Triple(
+                        "Закончил учиться 🎉",
+                        BentoPrimary,
+                        BentoPrimaryContainer
+                    )
+                    is CurrentClassStatus.NoClassesToday -> Triple(
+                        "Пар нет ☕",
+                        BentoOnSurfaceVariant,
+                        BentoSurfaceVariant
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = statusBg,
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(statusFg.copy(alpha = 0.4f)),
+                        width = 1.dp
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onOpenProfile)
+                        .testTag("profile_status_badge")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(statusFg)
                         )
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Профиль",
-                        tint = BentoOnSurfaceVariant,
-                        modifier = Modifier.size(26.dp)
-                    )
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = statusFg
+                            ),
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                // User Profile Avatar Button (Enlarged)
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(if (userProfile.isRegistered) BentoPrimary else BentoSurfaceVariant)
+                        .border(2.dp, BentoBorderLight, CircleShape)
+                        .shadow(elevation = 3.dp, shape = CircleShape)
+                        .clickable(onClick = onOpenProfile)
+                        .testTag("profile_avatar_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (userProfile.avatarUri != null) {
+                        AsyncImage(
+                            model = userProfile.avatarUri,
+                            contentDescription = "Аватар профиля",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else if (userProfile.isRegistered && userProfile.initials.isNotBlank()) {
+                        Text(
+                            text = userProfile.initials,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = BentoOnPrimary,
+                                fontSize = 16.sp
+                            )
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Профиль",
+                            tint = BentoOnSurfaceVariant,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
                 }
             }
         }

@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -31,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.domain.ObserveCurrentClassUseCase
 import com.example.model.AppThemeMode
+import com.example.model.CurrentClassStatus
 import com.example.model.UserProfile
 import com.example.model.WeekParityMode
 import com.example.ui.theme.*
@@ -40,6 +45,7 @@ import java.time.LocalDate
 fun ProfileScreen(
     userProfile: UserProfile,
     totalClasses: Int,
+    currentStatus: CurrentClassStatus = CurrentClassStatus.NoClassesToday,
     onOpenRegisterDialog: () -> Unit,
     onUpdateAvatar: (String?) -> Unit,
     onSelectParityMode: (WeekParityMode) -> Unit,
@@ -194,7 +200,52 @@ fun ProfileScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Live Status Chip
+                    val (statusLabel, statusColor, statusContainer) = when (currentStatus) {
+                        is CurrentClassStatus.ActiveClass -> Triple(
+                            "🟢 Сейчас на паре: ${currentStatus.currentSlot.subjectTitle} (${currentStatus.currentSlot.formattedTimeSpan})",
+                            BentoSuccessGreen,
+                            BentoGreenContainer
+                        )
+                        is CurrentClassStatus.FreePeriod -> Triple(
+                            "🟡 Перемена (следующая: ${currentStatus.nextSlot.subjectTitle})",
+                            BentoCoral,
+                            BentoCoralContainer
+                        )
+                        is CurrentClassStatus.DoneForToday -> Triple(
+                            "🏁 Закончил учиться на сегодня",
+                            BentoPrimary,
+                            BentoPrimaryContainer
+                        )
+                        is CurrentClassStatus.NoClassesToday -> Triple(
+                            "☕ Пар нет / Выходной",
+                            BentoOnSurfaceVariant,
+                            BentoSurfaceVariant
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = statusContainer,
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(statusColor.copy(alpha = 0.4f)),
+                            width = 1.dp
+                        )
+                    ) {
+                        Text(
+                            text = statusLabel,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = statusColor
+                            ),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedButton(
                         onClick = onOpenRegisterDialog,
                         shape = RoundedCornerShape(12.dp)
@@ -646,6 +697,64 @@ fun ProfileScreen(
                     }
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Subtle Developer Contact Footer
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = BentoSurfaceVariant.copy(alpha = 0.45f),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/kepepeee"))
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("Telegram", "@kepepeee"))
+                            Toast.makeText(context, "Telegram @kepepeee скопирован", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .testTag("developer_contact_chip")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Telegram",
+                        tint = BentoPrimary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = "Связь с разработчиком: @kepepeee",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.5.sp,
+                            color = BentoOnSurfaceVariant.copy(alpha = 0.75f),
+                            fontWeight = FontWeight.Normal
+                        )
+                    )
+                }
+            }
+
+            Text(
+                text = "Студенческое расписание • v1.0",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    color = BentoOnSurfaceVariant.copy(alpha = 0.4f)
+                )
+            )
         }
 
         Spacer(modifier = Modifier.height(96.dp))

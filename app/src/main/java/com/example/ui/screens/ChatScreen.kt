@@ -11,7 +11,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,9 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.model.ChatMessage
 import com.example.model.FriendUser
+import com.example.model.GroupChat
 import com.example.model.UserProfile
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -37,35 +43,59 @@ fun ChatScreen(
     currentChannelId: String,
     chatMessages: List<ChatMessage>,
     friends: List<FriendUser>,
+    groupChats: List<GroupChat>,
     userProfile: UserProfile,
     onSelectChannel: (String) -> Unit,
     onSendMessage: (String, String) -> Unit,
+    onCreateGroupChat: (name: String, memberFriendIds: List<String>) -> Unit,
+    onDeleteGroupChat: (groupId: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var inputText by remember { mutableStateOf("") }
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
+    // Ensure valid channel is selected if possible
+    LaunchedEffect(currentChannelId, friends, groupChats) {
+        val channelExists = groupChats.any { it.id == currentChannelId } || friends.any { it.id == currentChannelId }
+        if (!channelExists) {
+            if (groupChats.isNotEmpty()) {
+                onSelectChannel(groupChats.first().id)
+            } else if (friends.isNotEmpty()) {
+                onSelectChannel(friends.first().id)
+            }
+        }
+    }
+
+    val activeGroup = groupChats.firstOrNull { it.id == currentChannelId }
+    val activeFriend = friends.firstOrNull { it.id == currentChannelId }
+
+    val activeTitle = when {
+        activeGroup != null -> activeGroup.name
+        activeFriend != null -> activeFriend.displayName
+        else -> "Выберите чат"
+    }
+
+    val activeSubtitle = when {
+        activeGroup != null -> {
+            val memberNames = friends.filter { activeGroup.memberFriendIds.contains(it.id) }
+                .map { it.displayName.split(" ").first() }
+            if (memberNames.isEmpty()) "Вы в группе" else "Участники: ${memberNames.joinToString(", ")} + Вы"
+        }
+        activeFriend != null -> activeFriend.handle
+        else -> "Нажмите на друга или создайте группу"
+    }
+
     val filteredMessages = remember(chatMessages, currentChannelId) {
-        chatMessages.filter { it.channelId == currentChannelId }
+        if (currentChannelId.isBlank()) emptyList()
+        else chatMessages.filter { it.channelId == currentChannelId }
     }
 
     LaunchedEffect(filteredMessages.size) {
         if (filteredMessages.isNotEmpty()) {
             listState.animateScrollToItem(filteredMessages.size - 1)
         }
-    }
-
-    val activeFriend = friends.firstOrNull { it.id == currentChannelId }
-    val activeTitle = if (currentChannelId == "group_chat") {
-        "Общий чат группы"
-    } else {
-        activeFriend?.displayName ?: "Чат с другом"
-    }
-    val activeSubtitle = if (currentChannelId == "group_chat") {
-        "Курс • Поток ПО-21"
-    } else {
-        activeFriend?.handle ?: "@студент"
     }
 
     val quickChips = listOf(
@@ -99,21 +129,45 @@ fun ChatScreen(
                     )
                 )
                 Text(
-                    text = "Обсуждение пар, лекций и домашних заданий",
+                    text = "Личные диалоги с друзьями и созданные группы",
                     style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
+                )
+            }
+
+            // Button to open Create Group Dialog
+            FilledTonalButton(
+                onClick = { showCreateGroupDialog = true },
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = BentoPrimaryContainer,
+                    contentColor = BentoOnPrimaryContainer
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.testTag("btn_open_create_group")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.GroupAdd,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "+ Группа",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Horizontal Channel Selector (Group Chat + Friend Chats)
+        // Horizontal Channel Selector (Custom Group Chats + Friend Chats)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            item {
-                val isSelected = currentChannelId == "group_chat"
+            // Group chats created with friends
+            items(groupChats, key = { it.id }) { group ->
+                val isSelected = currentChannelId == group.id
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = if (isSelected) BentoPrimary else BentoSurface,
@@ -123,11 +177,11 @@ fun ChatScreen(
                     ),
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSelectChannel("group_chat") }
-                        .testTag("channel_group_chat")
+                        .clickable { onSelectChannel(group.id) }
+                        .testTag("channel_group_${group.id}")
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -138,7 +192,7 @@ fun ChatScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = "Общий чат группы",
+                            text = group.name,
                             maxLines = 1,
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
@@ -149,6 +203,7 @@ fun ChatScreen(
                 }
             }
 
+            // 1-on-1 Chats with Friends
             items(friends, key = { it.id }) { friend ->
                 val isSelected = currentChannelId == friend.id
                 Surface(
@@ -161,7 +216,7 @@ fun ChatScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { onSelectChannel(friend.id) }
-                        .testTag("channel_${friend.id}")
+                        .testTag("channel_friend_${friend.id}")
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -215,54 +270,75 @@ fun ChatScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(if (currentChannelId == "group_chat") BentoPrimaryContainer else BentoSurfaceVariant),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    if (currentChannelId == "group_chat") {
-                        Icon(
-                            imageVector = Icons.Default.Group,
-                            contentDescription = null,
-                            tint = BentoPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    } else if (activeFriend?.avatarUri != null) {
-                        AsyncImage(
-                            model = activeFriend.avatarUri,
-                            contentDescription = activeFriend.displayName,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(if (activeGroup != null) BentoPrimaryContainer else BentoSurfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (activeGroup != null) {
+                            Icon(
+                                imageVector = Icons.Default.Group,
+                                contentDescription = null,
+                                tint = BentoPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        } else if (activeFriend?.avatarUri != null) {
+                            AsyncImage(
+                                model = activeFriend.avatarUri,
+                                contentDescription = activeFriend.displayName,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(
+                                text = activeFriend?.avatarInitials ?: "💬",
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPrimary,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = activeFriend?.avatarInitials ?: "??",
-                            fontWeight = FontWeight.Bold,
-                            color = BentoPrimary,
-                            fontSize = 13.sp
+                            text = activeTitle,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = activeSubtitle,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = BentoOnSurfaceVariant,
+                                fontSize = 11.sp
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = activeTitle,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = activeSubtitle,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = BentoOnSurfaceVariant,
-                            fontSize = 11.sp
-                        ),
-                        maxLines = 1
-                    )
+                // Delete group button if active is custom group
+                if (activeGroup != null) {
+                    IconButton(
+                        onClick = { onDeleteGroupChat(activeGroup.id) },
+                        modifier = Modifier.testTag("btn_delete_group_${activeGroup.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Удалить группу",
+                            tint = BentoCoral
+                        )
+                    }
                 }
             }
         }
@@ -270,136 +346,359 @@ fun ChatScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         // Messages List
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 4.dp)
-        ) {
-            if (filteredMessages.isEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 60.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
+        if (currentChannelId.isBlank() || (activeGroup == null && activeFriend == null)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GroupAdd,
+                        contentDescription = null,
+                        tint = BentoPrimary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Нет выбранного чата",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Создайте групповой чат со своими друзьями с помощью кнопки «+ Группа» или выберите друга сверху",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = BentoOnSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                if (filteredMessages.isEmpty()) {
+                    item {
+                        Column(
                             modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(BentoPrimaryContainer),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(top = 60.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Group,
-                                contentDescription = null,
-                                tint = BentoPrimary,
-                                modifier = Modifier.size(28.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(BentoPrimaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (activeGroup != null) Icons.Default.Group else Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = BentoPrimary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "История сообщений чиста",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = BentoOnSurface
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Напишите первое сообщение или выберите быстрый ответ ниже",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = BentoOnSurfaceVariant
+                                ),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "История сообщений чиста",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = BentoOnSurface
+                    }
+                }
+
+                items(filteredMessages, key = { it.id }) { message ->
+                    ChatMessageBubble(message = message)
+                }
+            }
+
+            // Quick Reply Chips
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp)
+            ) {
+                items(quickChips) { chip ->
+                    SuggestionChip(
+                        onClick = {
+                            onSendMessage(currentChannelId, chip)
+                        },
+                        label = {
+                            Text(
+                                text = chip,
+                                fontSize = 11.sp,
+                                maxLines = 1
                             )
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = BentoSurface
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Напишите первое сообщение или выберите быстрый ответ ниже",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = BentoOnSurfaceVariant
-                            ),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+
+            // Message Input Row
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = BentoSurface,
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
+                    width = 1.dp
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 80.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder = { Text("Сообщение...", fontSize = 14.sp) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("chat_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        ),
+                        singleLine = true
+                    )
+
+                    IconButton(
+                        onClick = {
+                            if (inputText.isNotBlank()) {
+                                onSendMessage(currentChannelId, inputText.trim())
+                                inputText = ""
+                            }
+                        },
+                        modifier = Modifier.testTag("chat_send_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Отправить",
+                            tint = BentoPrimary
                         )
                     }
                 }
             }
-
-            items(filteredMessages, key = { it.id }) { message ->
-                ChatMessageBubble(message = message)
-            }
         }
+    }
 
-        // Quick Reply Chips
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp)
-        ) {
-            items(quickChips) { chip ->
-                SuggestionChip(
-                    onClick = {
-                        onSendMessage(currentChannelId, chip)
-                    },
-                    label = {
-                        Text(
-                            text = chip,
-                            fontSize = 11.sp,
-                            maxLines = 1
-                        )
-                    },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = BentoSurface
-                    )
-                )
+    // Create Group Chat Dialog
+    if (showCreateGroupDialog) {
+        CreateGroupChatDialog(
+            friends = friends,
+            onDismiss = { showCreateGroupDialog = false },
+            onCreate = { groupName, selectedIds ->
+                onCreateGroupChat(groupName, selectedIds)
+                showCreateGroupDialog = false
             }
-        }
+        )
+    }
+}
 
-        // Message Input Row
-        Surface(
+@Composable
+fun CreateGroupChatDialog(
+    friends: List<FriendUser>,
+    onDismiss: () -> Unit,
+    onCreate: (name: String, memberFriendIds: List<String>) -> Unit
+) {
+    var groupName by remember { mutableStateOf("") }
+    val selectedFriends = remember { mutableStateListOf<String>() }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
             shape = RoundedCornerShape(24.dp),
-            color = BentoSurface,
-            border = CardDefaults.outlinedCardBorder().copy(
-                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
-                width = 1.dp
-            ),
+            colors = CardDefaults.cardColors(containerColor = BentoSurface),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 80.dp)
+                .padding(16.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    placeholder = { Text("Сообщение...", fontSize = 14.sp) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("chat_input"),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
-                    ),
-                    singleLine = true
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Создать группу",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = BentoPrimary
+                        )
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Закрыть")
+                    }
+                }
+
+                Text(
+                    text = "Создавайте групповые чаты со своими друзьями и называйте их как угодно:",
+                    style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
                 )
 
-                IconButton(
-                    onClick = {
-                        if (inputText.isNotBlank()) {
-                            onSendMessage(currentChannelId, inputText.trim())
-                            inputText = ""
+                OutlinedTextField(
+                    value = groupName,
+                    onValueChange = { groupName = it },
+                    label = { Text("Название группы") },
+                    placeholder = { Text("например, ПО-21 Семинары") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_group_name")
+                )
+
+                Text(
+                    text = "Выберите друзей для добавления:",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                )
+
+                if (friends.isEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = BentoSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "У вас пока нет друзей. Добавьте друзей во вкладке «Друзья», чтобы создать группу!",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall.copy(color = BentoCoral)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(friends, key = { it.id }) { friend ->
+                            val isChecked = selectedFriends.contains(friend.id)
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isChecked) BentoPrimaryContainer else BentoSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (isChecked) {
+                                            selectedFriends.remove(friend.id)
+                                        } else {
+                                            selectedFriends.add(friend.id)
+                                        }
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(26.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    runCatching { Color(android.graphics.Color.parseColor(friend.avatarBgColorHex)) }
+                                                        .getOrDefault(BentoPrimary)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = friend.avatarInitials.take(1),
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Column {
+                                            Text(
+                                                text = friend.displayName,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                            )
+                                            Text(
+                                                text = friend.handle,
+                                                style = MaterialTheme.typography.labelSmall.copy(color = BentoOnSurfaceVariant)
+                                            )
+                                        }
+                                    }
+
+                                    Checkbox(
+                                        checked = isChecked,
+                                        onCheckedChange = { checked ->
+                                            if (checked) selectedFriends.add(friend.id)
+                                            else selectedFriends.remove(friend.id)
+                                        }
+                                    )
+                                }
+                            }
                         }
-                    },
-                    modifier = Modifier.testTag("chat_send_button")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Отправить",
-                        tint = BentoPrimary
-                    )
+                    TextButton(onClick = onDismiss) {
+                        Text("Отмена")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            if (groupName.isNotBlank() && selectedFriends.isNotEmpty()) {
+                                onCreate(groupName.trim(), selectedFriends.toList())
+                            }
+                        },
+                        enabled = groupName.isNotBlank() && selectedFriends.isNotEmpty(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("btn_confirm_create_group")
+                    ) {
+                        Text("Создать группу")
+                    }
                 }
             }
         }
@@ -473,3 +772,4 @@ fun ChatMessageBubble(message: ChatMessage) {
         }
     }
 }
+

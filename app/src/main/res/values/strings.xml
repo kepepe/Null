@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">null</string>
+    <string name="app_name">StudySync</string>
     <string name="notification_channel_name">Напоминания о парах</string>
 </resources>
