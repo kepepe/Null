@@ -7,11 +7,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Group
@@ -51,8 +53,7 @@ fun BentoNavigationBar(
     val items = listOf(
         NavItem("Главная", Icons.Filled.Home, Icons.Outlined.Home, "nav_home"),
         NavItem("Пары", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth, "nav_schedule"),
-        NavItem("Друзья", Icons.Filled.Group, Icons.Outlined.Group, "nav_friends"),
-        NavItem("Чат", Icons.Filled.Forum, Icons.Outlined.Forum, "nav_chat"),
+        NavItem("СРС", Icons.Filled.Assignment, Icons.Outlined.Assignment, "nav_srs"),
         NavItem("Профиль", Icons.Filled.Person, Icons.Outlined.Person, "nav_profile")
     )
 

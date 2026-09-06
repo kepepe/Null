@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -18,6 +17,7 @@ import com.example.data.AppDatabase
 import com.example.data.ScheduleRepository
 import com.example.domain.ObserveCurrentClassUseCase
 import com.example.model.ClassSlot
+import com.example.model.SrsTask
 import com.example.ui.MainViewModel
 import com.example.ui.components.*
 import com.example.ui.screens.*
@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val database = AppDatabase.getDatabase(applicationContext)
-        val repository = ScheduleRepository(database.classDao(), applicationContext)
+        val repository = ScheduleRepository(database.classDao(), database.srsTaskDao(), applicationContext)
         val observeUseCase = ObserveCurrentClassUseCase(repository)
 
         val viewModelFactory = MainViewModel.Factory(repository, observeUseCase)
@@ -47,12 +47,9 @@ class MainActivity : ComponentActivity() {
                 val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
                 val currentStatus by viewModel.currentClassStatus.collectAsStateWithLifecycle()
                 val allClasses by viewModel.allClasses.collectAsStateWithLifecycle()
-                val friends by viewModel.friends.collectAsStateWithLifecycle()
-                val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
-                val groupChats by viewModel.groupChats.collectAsStateWithLifecycle()
+                val todayWindows by viewModel.todayWindows.collectAsStateWithLifecycle()
+                val srsTasks by viewModel.srsTasks.collectAsStateWithLifecycle()
                 val attendanceMap by viewModel.attendanceMap.collectAsStateWithLifecycle()
-                val selectedChatChannel by viewModel.selectedChatChannel.collectAsStateWithLifecycle()
-                val viewingFriendSchedule by viewModel.viewingFriendSchedule.collectAsStateWithLifecycle()
                 val selectedDay by viewModel.selectedTimetableDay.collectAsStateWithLifecycle()
                 val selectedParity by viewModel.selectedParityFilter.collectAsStateWithLifecycle()
                 val subjectPresets by viewModel.subjectPresets.collectAsStateWithLifecycle()
@@ -62,8 +59,10 @@ class MainActivity : ComponentActivity() {
 
                 var showAddEditDialog by remember { mutableStateOf(false) }
                 var editingSlot by remember { mutableStateOf<ClassSlot?>(null) }
-                var showAddFriendDialog by remember { mutableStateOf(false) }
+                var showAddEditSrsDialog by remember { mutableStateOf(false) }
+                var editingSrsTask by remember { mutableStateOf<SrsTask?>(null) }
                 var showRegisterDialog by remember { mutableStateOf(false) }
+                var showEditBellsDialog by remember { mutableStateOf(false) }
 
                 LaunchedEffect(toastMessage) {
                     toastMessage?.let {
@@ -91,12 +90,11 @@ class MainActivity : ComponentActivity() {
                         when (currentTab) {
                             0 -> DashboardScreen(
                                 currentStatus = currentStatus,
-                                friends = friends,
+                                windows = todayWindows,
+                                allClasses = allClasses,
                                 userProfile = userProfile,
-                                allClassesCount = allClasses.size,
                                 onOpenSchedule = { viewModel.selectTab(1) },
-                                onOpenFriends = { viewModel.selectTab(2) },
-                                onOpenProfile = { viewModel.selectTab(4) },
+                                onOpenProfile = { viewModel.selectTab(3) },
                                 onAddNewClass = {
                                     editingSlot = null
                                     showAddEditDialog = true
@@ -110,9 +108,8 @@ class MainActivity : ComponentActivity() {
                                 allClasses = allClasses,
                                 selectedDay = selectedDay,
                                 selectedParity = selectedParity,
+                                bellSchedule = userProfile.bellSlots,
                                 attendanceMap = attendanceMap,
-                                friends = friends,
-                                groupChats = groupChats,
                                 onSelectDay = { viewModel.selectTimetableDay(it) },
                                 onSelectParity = { viewModel.selectParityFilter(it) },
                                 onEditClass = { slot ->
@@ -126,51 +123,49 @@ class MainActivity : ComponentActivity() {
                                 onSetAttendance = { classId, date, status ->
                                     viewModel.setAttendance(classId, date, status)
                                 },
-                                onShareSchedule = { channelId, classes, title ->
-                                    viewModel.shareScheduleToChat(channelId, classes, title)
+                                onIncrementSkip = { classId ->
+                                    viewModel.incrementSkip(classId)
+                                },
+                                onDecrementSkip = { classId ->
+                                    viewModel.decrementSkip(classId)
+                                },
+                                onImportClasses = { imported ->
+                                    viewModel.importClasses(imported)
                                 }
                             )
 
-                            2 -> FriendsScreen(
-                                friends = friends,
-                                userProfile = userProfile,
-                                onAddFriendClick = { showAddFriendDialog = true },
-                                onRemoveFriend = { viewModel.removeFriend(it) },
-                                onOpenRegisterDialog = { showRegisterDialog = true },
-                                onAddSuggestedFriend = { viewModel.addFriendInBg(it) },
-                                onViewSchedule = { friend ->
-                                    viewModel.openFriendSchedule(friend)
+                            2 -> SrsScreen(
+                                tasks = srsTasks,
+                                allClasses = allClasses,
+                                onToggleTask = { id, isCompleted ->
+                                    viewModel.toggleSrsTask(id, isCompleted)
                                 },
-                                onOpenChat = { friendId ->
-                                    viewModel.openFriendChat(friendId)
+                                onEditTask = { task ->
+                                    editingSrsTask = task
+                                    showAddEditSrsDialog = true
+                                },
+                                onDeleteTask = { id ->
+                                    viewModel.deleteSrsTask(id)
+                                },
+                                onAddNewTask = {
+                                    editingSrsTask = null
+                                    showAddEditSrsDialog = true
+                                },
+                                onNavigateToSchedule = {
+                                    viewModel.selectTab(1)
                                 }
                             )
 
-                            3 -> ChatScreen(
-                                currentChannelId = selectedChatChannel,
-                                chatMessages = chatMessages,
-                                friends = friends,
-                                groupChats = groupChats,
-                                userProfile = userProfile,
-                                onSelectChannel = { viewModel.selectChatChannel(it) },
-                                onSendMessage = { channelId, text ->
-                                    viewModel.sendMessage(channelId, text)
-                                },
-                                onCreateGroupChat = { name, members ->
-                                    viewModel.createGroupChat(name, members)
-                                },
-                                onDeleteGroupChat = { groupId ->
-                                    viewModel.deleteGroupChat(groupId)
-                                }
-                            )
-
-                            4 -> ProfileScreen(
+                            3 -> ProfileScreen(
                                 userProfile = userProfile,
                                 totalClasses = allClasses.size,
                                 currentStatus = currentStatus,
                                 onOpenRegisterDialog = { showRegisterDialog = true },
                                 onUpdateAvatar = { uri ->
                                     viewModel.updateUserAvatar(uri)
+                                },
+                                onSelectBellPreset = { preset ->
+                                    viewModel.setBellPreset(preset)
                                 },
                                 onSelectParityMode = { mode ->
                                     viewModel.setWeekParityMode(mode)
@@ -184,10 +179,12 @@ class MainActivity : ComponentActivity() {
                                 onTestNotification = {
                                     viewModel.testNotification(applicationContext)
                                 },
+                                onToggleAutoSilentMode = { enabled ->
+                                    viewModel.setAutoSilentMode(enabled)
+                                },
+                                onOpenEditBellsDialog = { showEditBellsDialog = true },
                                 onLoadDemoSchedule = { viewModel.loadDemoSchedule() },
-                                onClearSchedule = { viewModel.clearSchedule() },
-                                onClearChat = { viewModel.clearChat() },
-                                onSyncWithCloud = { viewModel.syncWithCloud() }
+                                onClearSchedule = { viewModel.clearSchedule() }
                             )
                         }
                     }
@@ -196,6 +193,7 @@ class MainActivity : ComponentActivity() {
                         AddEditClassDialog(
                             initialSlot = editingSlot,
                             defaultDay = selectedDay,
+                            bellSlots = userProfile.bellSlots,
                             subjectPresets = subjectPresets,
                             onDismiss = {
                                 showAddEditDialog = false
@@ -214,11 +212,23 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    if (showAddFriendDialog) {
-                        AddFriendDialog(
-                            onDismiss = { showAddFriendDialog = false },
-                            onAddFriend = { query ->
-                                viewModel.addFriend(query)
+                    if (showAddEditSrsDialog) {
+                        AddEditSrsTaskDialog(
+                            allClasses = allClasses,
+                            initialTask = editingSrsTask,
+                            onDismiss = {
+                                showAddEditSrsDialog = false
+                                editingSrsTask = null
+                            },
+                            onSave = { task ->
+                                viewModel.addOrUpdateSrsTask(task)
+                                showAddEditSrsDialog = false
+                                editingSrsTask = null
+                            },
+                            onDelete = { id ->
+                                viewModel.deleteSrsTask(id)
+                                showAddEditSrsDialog = false
+                                editingSrsTask = null
                             }
                         )
                     }
@@ -233,12 +243,12 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    viewingFriendSchedule?.let { friend ->
-                        FriendScheduleDialog(
-                            friend = friend,
-                            onDismiss = { viewModel.openFriendSchedule(null) },
-                            onOpenChat = {
-                                viewModel.openFriendChat(friend.id)
+                    if (showEditBellsDialog) {
+                        EditBellScheduleDialog(
+                            initialSlots = userProfile.bellSlots,
+                            onDismiss = { showEditBellsDialog = false },
+                            onSave = { updatedSlots ->
+                                viewModel.updateBellSlots(updatedSlots)
                             }
                         )
                     }
@@ -246,9 +256,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(text = "Привет, $name!", modifier = modifier)
 }

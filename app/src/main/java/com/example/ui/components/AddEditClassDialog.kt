@@ -11,8 +11,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ fun AddEditClassDialog(
     initialSlot: ClassSlot? = null,
     defaultDay: DayOfWeek = DayOfWeek.MONDAY,
     subjectPresets: List<SubjectPreset> = emptyList(),
+    bellSlots: List<BellSlot> = standardBellSchedule,
     onDismiss: () -> Unit,
     onSave: (ClassSlot) -> Unit,
     onDelete: ((String) -> Unit)? = null
@@ -53,19 +56,21 @@ fun AddEditClassDialog(
         mutableStateOf(initialSlot?.endTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "11:30")
     }
     var weekParity by remember { mutableStateOf(initialSlot?.weekParity ?: WeekParity.ALL) }
+    var allowedSkips by remember { mutableIntStateOf(initialSlot?.allowedSkips ?: 3) }
     var selectedColorHex by remember {
         mutableStateOf(initialSlot?.colorHex ?: subjectColorPalette.first().first)
     }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    val activeSuggestions = remember(subjectTitle, subjectPresets) {
-        if (subjectTitle.isBlank()) {
-            subjectPresets.take(8)
+    val hasEnteredSubjectData = subjectTitle.isNotBlank() && (professor.isNotBlank() || classroom.isNotBlank())
+    val activeSuggestions = remember(subjectTitle, professor, classroom, subjectPresets) {
+        if (!hasEnteredSubjectData) {
+            emptyList()
         } else {
+            val trimmed = subjectTitle.trim()
             subjectPresets.filter {
-                it.title.contains(subjectTitle.trim(), ignoreCase = true) &&
-                !it.title.equals(subjectTitle.trim(), ignoreCase = true)
-            }.take(6)
+                it.title.contains(trimmed, ignoreCase = true)
+            }.take(4)
         }
     }
 
@@ -131,11 +136,37 @@ fun AddEditClassDialog(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Autocomplete Subject Presets from Memory
+                // Professor
+                OutlinedTextField(
+                    value = professor,
+                    onValueChange = { professor = it },
+                    label = { Text("Преподаватель") },
+                    placeholder = { Text("напр. проф. Соколов А.В.") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("professor_input"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                // Classroom
+                OutlinedTextField(
+                    value = classroom,
+                    onValueChange = { classroom = it },
+                    label = { Text("Аудитория / Корпус") },
+                    placeholder = { Text("напр. Ауд. 402, Корпус 2") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("classroom_input"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                // Autocomplete Subject Presets (shown only after user enters subject details)
                 if (activeSuggestions.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "💡 Подсказка (нажмите для автозаполнения):",
+                            text = "💡 Подсказка из сохранённых предметов:",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = BentoPrimary
@@ -180,56 +211,52 @@ fun AddEditClassDialog(
                     }
                 }
 
-                // Professor
-                OutlinedTextField(
-                    value = professor,
-                    onValueChange = { professor = it },
-                    label = { Text("Преподаватель") },
-                    placeholder = { Text("напр. проф. Соколов А.В.") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("professor_input"),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                // Classroom
-                OutlinedTextField(
-                    value = classroom,
-                    onValueChange = { classroom = it },
-                    label = { Text("Аудитория / Корпус") },
-                    placeholder = { Text("напр. Ауд. 402, Корпус 2") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("classroom_input"),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                // Class Type Chips
+                // Class Type Chips (горизонтальная прокрутка)
                 Text(
                     text = "Тип занятия",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                 )
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    ClassType.values().forEach { type ->
+                    items(ClassType.values()) { type ->
                         FilterChip(
                             selected = classType == type,
                             onClick = { classType = type },
-                            label = { Text(type.displayName, fontSize = 11.sp) },
+                            label = { Text(type.displayName, fontSize = 11.5.sp) },
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
                 }
 
                 // Day of Week
-                Text(
-                    text = "День недели",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                )
+                val dayRussianName = when (dayOfWeek) {
+                    DayOfWeek.MONDAY -> "Понедельник"
+                    DayOfWeek.TUESDAY -> "Вторник"
+                    DayOfWeek.WEDNESDAY -> "Среда"
+                    DayOfWeek.THURSDAY -> "Четверг"
+                    DayOfWeek.FRIDAY -> "Пятница"
+                    DayOfWeek.SATURDAY -> "Суббота"
+                    DayOfWeek.SUNDAY -> "Воскресенье"
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "День недели:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = dayRussianName,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = BentoPrimary
+                        )
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -290,7 +317,7 @@ fun AddEditClassDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(standardBellSchedule) { bell ->
+                        items(bellSlots) { bell ->
                             SuggestionChip(
                                 onClick = {
                                     val fmt = DateTimeFormatter.ofPattern("HH:mm")
@@ -367,6 +394,48 @@ fun AddEditClassDialog(
                     }
                 }
 
+                // Allowed Skips Counter (Лимит допустимых пропусков за семестр)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Лимит допустимых пропусков",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalIconButton(
+                            onClick = { if (allowedSkips > 1) allowedSkips-- },
+                            modifier = Modifier.size(34.dp),
+                            shape = CircleShape
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Уменьшить", modifier = Modifier.size(16.dp))
+                        }
+
+                        Text(
+                            text = "$allowedSkips",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Black,
+                                color = BentoPrimary
+                            ),
+                            modifier = Modifier.widthIn(min = 24.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+
+                        FilledTonalIconButton(
+                            onClick = { if (allowedSkips < 40) allowedSkips++ },
+                            modifier = Modifier.size(34.dp),
+                            shape = CircleShape
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Увеличить", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
                 if (errorMessage != null) {
                     Text(
                         text = errorMessage ?: "",
@@ -414,7 +483,9 @@ fun AddEditClassDialog(
                                 startTime = parsedStart,
                                 endTime = parsedEnd,
                                 weekParity = weekParity,
-                                colorHex = selectedColorHex
+                                colorHex = selectedColorHex,
+                                allowedSkips = allowedSkips,
+                                skippedCount = initialSlot?.skippedCount ?: 0
                             )
                             onSave(slot)
                             onDismiss()

@@ -14,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,11 +36,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.domain.ObserveCurrentClassUseCase
-import com.example.model.AppThemeMode
-import com.example.model.CurrentClassStatus
-import com.example.model.UserProfile
-import com.example.model.WeekParityMode
+import com.example.model.*
 import com.example.ui.theme.*
+import com.example.util.SilentModeHelper
+import java.io.File
 import java.time.LocalDate
 
 @Composable
@@ -48,14 +49,15 @@ fun ProfileScreen(
     currentStatus: CurrentClassStatus = CurrentClassStatus.NoClassesToday,
     onOpenRegisterDialog: () -> Unit,
     onUpdateAvatar: (String?) -> Unit,
+    onSelectBellPreset: (BellSchedulePreset) -> Unit,
     onSelectParityMode: (WeekParityMode) -> Unit,
     onSelectThemeMode: (AppThemeMode) -> Unit,
     onToggleNotifications: (Boolean) -> Unit,
     onTestNotification: () -> Unit,
+    onToggleAutoSilentMode: (Boolean) -> Unit,
+    onOpenEditBellsDialog: () -> Unit = {},
     onLoadDemoSchedule: () -> Unit,
     onClearSchedule: () -> Unit,
-    onClearChat: () -> Unit,
-    onSyncWithCloud: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -64,7 +66,17 @@ fun ProfileScreen(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            onUpdateAvatar(uri.toString())
+            val localPath = runCatching {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val file = File(context.filesDir, "avatar_${System.currentTimeMillis()}.jpg")
+                inputStream?.use { input ->
+                    file.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                file.absolutePath
+            }.getOrNull()
+            onUpdateAvatar(localPath ?: uri.toString())
         }
     }
 
@@ -79,6 +91,10 @@ fun ProfileScreen(
         }
     }
 
+    val hasDndAccess = remember(userProfile.autoSilentMode) {
+        SilentModeHelper.isDndAccessGranted(context)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -89,20 +105,22 @@ fun ProfileScreen(
         Spacer(modifier = Modifier.height(14.dp))
 
         Text(
-            text = "Профиль и настройки",
+            text = "Настройки и профиль",
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontWeight = FontWeight.Bold,
                 color = BentoPrimary
             )
         )
         Text(
-            text = "Тема, чётность недель, уведомления и аккаунт",
+            text = "Сетка звонков, режим тишины, чётность недель и аккаунт",
             style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 1. Profile Identity Bento Card
+        // ==========================================
+        // 1. ДАННЫЕ ПРОФИЛЯ СТУДЕНТА
+        // ==========================================
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = BentoSurface),
@@ -118,12 +136,13 @@ fun ProfileScreen(
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Avatar with Photo Picker Overlay
+                // Avatar with Photo Picker
                 Box(
                     modifier = Modifier
-                        .size(86.dp)
+                        .size(80.dp)
                         .clip(CircleShape)
                         .background(if (userProfile.isRegistered) BentoPrimary else BentoSurfaceVariant)
+                        .border(2.dp, BentoBorderLight, CircleShape)
                         .clickable {
                             photoPickerLauncher.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -131,9 +150,15 @@ fun ProfileScreen(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (userProfile.avatarUri != null) {
+                    val avatarUri = userProfile.avatarUri
+                    if (!avatarUri.isNullOrBlank()) {
+                        val imageModel: Any = if (avatarUri.startsWith("/")) {
+                            File(avatarUri)
+                        } else {
+                            avatarUri
+                        }
                         AsyncImage(
-                            model = userProfile.avatarUri,
+                            model = imageModel,
                             contentDescription = "Фото профиля",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -149,239 +174,96 @@ fun ProfileScreen(
                     } else {
                         Icon(
                             imageVector = Icons.Default.Person,
-                            contentDescription = "Профиль",
+                            contentDescription = "Аватар",
                             tint = BentoOnSurfaceVariant,
-                            modifier = Modifier.size(42.dp)
+                            modifier = Modifier.size(40.dp)
                         )
                     }
 
-                    // Mini camera badge
-                    Box(
+                    Surface(
                         modifier = Modifier
-                            .size(28.dp)
                             .align(Alignment.BottomEnd)
-                            .clip(CircleShape)
-                            .background(BentoPrimary)
-                            .border(2.dp, BentoSurface, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "Сменить фото",
-                            tint = BentoOnPrimary,
-                            modifier = Modifier.size(15.dp)
+                            .size(26.dp),
+                        shape = CircleShape,
+                        color = BentoPrimary,
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                            width = 2.dp
                         )
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "Сменить фото",
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 if (userProfile.isRegistered) {
                     Text(
                         text = userProfile.name,
-                        style = MaterialTheme.typography.titleLarge.copy(
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = BentoOnSurface
+                        )
+                    )
+                    if (userProfile.handle.isNotBlank()) {
+                        Text(
+                            text = userProfile.handle,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = BentoPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
+                    if (userProfile.university.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "🏛 ${userProfile.university}",
+                            style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Студент",
+                        style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = BentoOnSurface
                         )
                     )
                     Text(
-                        text = userProfile.handle,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = BentoPrimary,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        text = "Заполните данные студента",
+                        style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
                     )
+                }
 
-                    if (userProfile.university.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = userProfile.university,
-                            style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
+                Spacer(modifier = Modifier.height(10.dp))
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Live Status Chip
-                    val (statusLabel, statusColor, statusContainer) = when (currentStatus) {
-                        is CurrentClassStatus.ActiveClass -> Triple(
-                            "🟢 Сейчас на паре: ${currentStatus.currentSlot.subjectTitle} (${currentStatus.currentSlot.formattedTimeSpan})",
-                            BentoSuccessGreen,
-                            BentoGreenContainer
-                        )
-                        is CurrentClassStatus.FreePeriod -> Triple(
-                            "🟡 Перемена (следующая: ${currentStatus.nextSlot.subjectTitle})",
-                            BentoCoral,
-                            BentoCoralContainer
-                        )
-                        is CurrentClassStatus.DoneForToday -> Triple(
-                            "🏁 Закончил учиться на сегодня",
-                            BentoPrimary,
-                            BentoPrimaryContainer
-                        )
-                        is CurrentClassStatus.NoClassesToday -> Triple(
-                            "☕ Пар нет / Выходной",
-                            BentoOnSurfaceVariant,
-                            BentoSurfaceVariant
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = statusContainer,
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(statusColor.copy(alpha = 0.4f)),
-                            width = 1.dp
-                        )
-                    ) {
-                        Text(
-                            text = statusLabel,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = statusColor
-                            ),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = onOpenRegisterDialog,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Редактировать данные")
-                    }
-                } else {
-                    Text(
-                        text = "Профиль не создан",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                OutlinedButton(
+                    onClick = onOpenRegisterDialog,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = if (userProfile.isRegistered) Icons.Default.Edit else Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
                     )
-                    Text(
-                        text = "Создайте профиль с @тегом, чтобы друзья могли находить вас",
-                        style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = onOpenRegisterDialog,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
-                    ) {
-                        Text("Создать профиль", fontWeight = FontWeight.Bold)
-                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (userProfile.isRegistered) "Изменить профиль" else "Заполнить профиль")
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // 2. Theme Mode Selector Card (Светлая / Тёмная / Системная)
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = BentoSurface),
-            border = CardDefaults.outlinedCardBorder().copy(
-                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
-                width = 1.dp
-            ),
-            modifier = Modifier.fillMaxWidth().testTag("theme_selector_card")
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(BentoPrimary.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DarkMode,
-                            contentDescription = null,
-                            tint = BentoPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Column {
-                        Text(
-                            text = "Тема оформления",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "Выберите светлый, тёмный или системный стиль",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = BentoOnSurfaceVariant,
-                                fontSize = 11.5.sp
-                            )
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val themeModes = listOf(
-                        Triple(AppThemeMode.LIGHT, "Светлая", Icons.Default.LightMode),
-                        Triple(AppThemeMode.DARK, "Тёмная", Icons.Default.DarkMode),
-                        Triple(AppThemeMode.SYSTEM, "Авто", Icons.Default.BrightnessAuto)
-                    )
-
-                    themeModes.forEach { (mode, label, icon) ->
-                        val isSelected = userProfile.themeMode == mode
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) BentoPrimary else BentoPrimaryContainer.copy(alpha = 0.35f),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onSelectThemeMode(mode) }
-                                .testTag("theme_mode_${mode.name.lowercase()}")
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = if (isSelected) Color.White else BentoPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = label,
-                                    maxLines = 1,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) Color.White else BentoOnPrimaryContainer,
-                                        fontSize = 11.sp
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 3. Week Parity Selector Card
+        // ==========================================
+        // 2. АВТО-БЕЗЗВУЧНЫЙ РЕЖИМ НА ПАРАХ
+        // ==========================================
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = BentoSurface),
@@ -391,48 +273,118 @@ fun ProfileScreen(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(BentoPrimary.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarViewWeek,
-                            contentDescription = null,
-                            tint = BentoPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BentoCoral.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeOff,
+                                contentDescription = null,
+                                tint = BentoCoral,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Авто-беззвучный режим",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "Выключать звук и виброзвонок во время пар",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = BentoOnSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            )
+                        }
                     }
 
-                    Column {
-                        Text(
-                            text = "Чётность недели",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "Числитель / знаменатель расписания",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = BentoOnSurfaceVariant,
-                                fontSize = 11.5.sp
-                            )
-                        )
-                    }
+                    Switch(
+                        checked = userProfile.autoSilentMode,
+                        onCheckedChange = { isChecked ->
+                            onToggleAutoSilentMode(isChecked)
+                            if (isChecked && !hasDndAccess) {
+                                SilentModeHelper.openDndSettings(context)
+                            }
+                        }
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                if (userProfile.autoSilentMode && !hasDndAccess) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = BentoCoralContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Требуется доступ «Не беспокоить» в системе",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    color = BentoOnCoralContainer
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            FilledTonalButton(
+                                onClick = { SilentModeHelper.openDndSettings(context) },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text("Включить", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ==========================================
+        // 3. ЧЁТНОСТЬ НЕДЕЛЬ (БЕЗ слов "Числитель/Знаменатель")
+        // ==========================================
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = BentoSurface),
+            border = CardDefaults.outlinedCardBorder().copy(
+                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
+                width = 1.dp
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Выберите, как определять тип недели. При смещении в семестре можно переключить вручную.",
+                    text = "Чётность недель",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                )
+                Text(
+                    text = "Текущий статус: ${ObserveCurrentClassUseCase.getCurrentWeekParityText(LocalDate.now(), userProfile.parityMode)}",
                     style = MaterialTheme.typography.bodySmall.copy(
-                        color = BentoOnSurfaceVariant,
-                        fontSize = 12.sp
+                        color = BentoPrimary,
+                        fontWeight = FontWeight.SemiBold
                     )
                 )
 
@@ -442,45 +394,24 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val modes = listOf(
-                        WeekParityMode.AUTO to "Авто",
-                        WeekParityMode.ODD to "Нечётная (I)",
-                        WeekParityMode.EVEN to "Чётная (II)"
-                    )
-
-                    modes.forEach { (mode, label) ->
+                    WeekParityMode.values().forEach { mode ->
                         val isSelected = userProfile.parityMode == mode
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) BentoPrimary else BentoPrimaryContainer.copy(alpha = 0.35f),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onSelectParityMode(mode) }
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    maxLines = 1,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) Color.White else BentoOnPrimaryContainer,
-                                        fontSize = 11.sp
-                                    )
-                                )
-                            }
-                        }
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onSelectParityMode(mode) },
+                            label = { Text(mode.displayName, fontSize = 11.5.sp) },
+                            shape = RoundedCornerShape(10.dp)
+                        )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // 4. Push Notifications Settings Card
+        // ==========================================
+        // 4. ПУШ-УВЕДОМЛЕНИЯ О ПАРАХ
+        // ==========================================
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = BentoSurface),
@@ -490,11 +421,11 @@ fun ProfileScreen(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -563,183 +494,165 @@ fun ProfileScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // 5. Campus Stats Bento Grid
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = BentoSurface),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
-                    width = 1.dp
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "ВСЕГО ПАР",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = BentoOnSurfaceVariant
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "$totalClasses",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Black,
-                            color = BentoPrimary
-                        )
-                    )
-                    Text(
-                        text = "В вашем расписании",
-                        style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
-                    )
-                }
-            }
-
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = BentoSurface),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
-                    width = 1.dp
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "РЕЖИМ НЕДЕЛИ",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = BentoOnSurfaceVariant
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = ObserveCurrentClassUseCase.getCurrentWeekParityText(LocalDate.now(), userProfile.parityMode),
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Black,
-                            color = BentoPrimary
-                        )
-                    )
-                    Text(
-                        text = "Активный статус",
-                        style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Cloud Firestore Status Card
+        // ==========================================
+        // 5. ТЕМА ОФОРМЛЕНИЯ
+        // ==========================================
         Card(
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = BentoPrimaryContainer.copy(alpha = 0.5f)),
+            colors = CardDefaults.cardColors(containerColor = BentoSurface),
             border = CardDefaults.outlinedCardBorder().copy(
-                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderContainer),
+                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
                 width = 1.dp
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Оформление приложения",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AppThemeMode.values().forEach { themeMode ->
+                        val isSelected = userProfile.themeMode == themeMode
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onSelectThemeMode(themeMode) },
+                            label = { Text(themeMode.displayName, fontSize = 12.sp) },
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ==========================================
+        // 6. СЕТКА ЗВОНКОВ (Ручная настройка)
+        // ==========================================
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = BentoSurface),
+            border = CardDefaults.outlinedCardBorder().copy(
+                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
+                width = 1.dp
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("bell_schedule_settings_card")
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = BentoPrimary,
-                        modifier = Modifier.size(40.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BentoPrimary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDone,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.AccessTime,
+                            contentDescription = null,
+                            tint = BentoPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
+
                     Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "Google Firebase",
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = BentoPrimary
-                                )
-                            )
-                            Surface(
-                                shape = CircleShape,
-                                color = BentoGreenContainer
-                            ) {
-                                Text(
-                                    text = "АКТИВНО",
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = BentoSuccessGreen
-                                    )
-                                )
-                            }
-                        }
                         Text(
-                            text = "Автоматическое сохранение в облаке в реальном времени",
+                            text = "Сетка звонков университета",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = "Время пар по умолчанию в расписании",
                             style = MaterialTheme.typography.bodySmall.copy(
-                                color = BentoOnPrimaryContainer,
+                                color = BentoOnSurfaceVariant,
                                 fontSize = 11.sp
                             )
                         )
                     }
                 }
 
+                // Visual Preview of the Bell Schedule
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = BentoGreenContainer,
-                    modifier = Modifier.padding(start = 6.dp)
+                    color = BentoSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = BentoSuccessGreen,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Авто",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = BentoSuccessGreen
+                            text = "Расписание пар (${userProfile.bellSlots.size} пар):",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPrimary
+                            )
                         )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(userProfile.bellSlots) { slot ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = CardDefaults.outlinedCardBorder().copy(
+                                        brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
+                                        width = 1.dp
+                                    )
+                                ) {
+                                    Text(
+                                        text = "${slot.pairNumber}п: ${slot.formattedTimeSpan}",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
+                }
+
+                // Button to manually configure bell schedule
+                Button(
+                    onClick = onOpenEditBellsDialog,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Настроить сетку звонков вручную")
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // 6. Data & Tools Options Card
+        // ==========================================
+        // 7. СТАТИСТИКА И ДЕЙСТВИЯ С РАСПИСАНИЕМ
+        // ==========================================
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = BentoSurface),
@@ -750,10 +663,23 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "Управление данными",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Расписание: пар в базе",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = "$totalClasses",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Black,
+                            color = BentoPrimary
+                        )
+                    )
+                }
 
                 OutlinedButton(
                     onClick = onLoadDemoSchedule,
@@ -767,20 +693,6 @@ fun ProfileScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Загрузить пример расписания")
-                }
-
-                OutlinedButton(
-                    onClick = onClearChat,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CleaningServices,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Очистить историю чата")
                 }
 
                 if (totalClasses > 0) {
@@ -802,9 +714,11 @@ fun ProfileScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Subtle Developer Contact Footer
+        // ==========================================
+        // 8. СВЯЗЬ С РАЗРАБОТЧИКОМ (FOOTER)
+        // ==========================================
         Column(
             modifier = Modifier
                 .fillMaxWidth()

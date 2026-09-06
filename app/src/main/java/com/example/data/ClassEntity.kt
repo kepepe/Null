@@ -20,7 +20,9 @@ data class ClassEntity(
     val startTime: String, // "HH:mm"
     val endTime: String,   // "HH:mm"
     val weekParity: String,
-    val colorHex: String?
+    val colorHex: String?,
+    val allowedSkips: Int = 3,
+    val skippedCount: Int = 0
 ) {
     fun toDomain(): ClassSlot {
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -34,7 +36,9 @@ data class ClassEntity(
             startTime = LocalTime.parse(startTime, timeFormatter),
             endTime = LocalTime.parse(endTime, timeFormatter),
             weekParity = runCatching { WeekParity.valueOf(weekParity) }.getOrDefault(WeekParity.ALL),
-            colorHex = colorHex
+            colorHex = colorHex,
+            allowedSkips = allowedSkips,
+            skippedCount = skippedCount
         )
     }
 
@@ -51,7 +55,9 @@ data class ClassEntity(
                 startTime = slot.startTime.format(timeFormatter),
                 endTime = slot.endTime.format(timeFormatter),
                 weekParity = slot.weekParity.name,
-                colorHex = slot.colorHex
+                colorHex = slot.colorHex,
+                allowedSkips = slot.allowedSkips,
+                skippedCount = slot.skippedCount
             )
         }
     }

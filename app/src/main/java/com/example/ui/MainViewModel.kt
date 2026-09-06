@@ -78,10 +78,24 @@ class MainViewModel(
             initialValue = emptyMap()
         )
 
+    val srsTasks: StateFlow<List<SrsTask>> = repository.observeAllSrsTasks()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val todayWindows: StateFlow<List<ScheduleWindow>> = observeCurrentClassUseCase.observeTodayWindows()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     private val _currentTab = MutableStateFlow(0)
     val currentTab: StateFlow<Int> = _currentTab.asStateFlow()
 
-    private val _selectedTimetableDay = MutableStateFlow(LocalDate.now().dayOfWeek)
+    private val _selectedTimetableDay = MutableStateFlow(DayOfWeek.MONDAY)
     val selectedTimetableDay: StateFlow<DayOfWeek> = _selectedTimetableDay.asStateFlow()
 
     private val _selectedParityFilter = MutableStateFlow(WeekParity.ALL)
@@ -95,6 +109,14 @@ class MainViewModel(
 
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            currentClassStatus.collect { status ->
+                repository.applyAutoSilentMode(status)
+            }
+        }
+    }
 
     fun registerUser(name: String, handle: String, university: String, avatarUri: String? = null) {
         val updated = repository.saveUserProfile(name, handle, university, avatarUri)
@@ -159,6 +181,29 @@ class MainViewModel(
 
     fun selectTab(index: Int) {
         _currentTab.value = index
+        if (index == 1) {
+            _selectedTimetableDay.value = DayOfWeek.MONDAY
+        }
+    }
+
+    fun addOrUpdateSrsTask(task: SrsTask) {
+        viewModelScope.launch {
+            repository.addOrUpdateSrsTask(task)
+            _toastMessage.value = "Задание «${task.title}» сохранено"
+        }
+    }
+
+    fun toggleSrsTask(id: String, isCompleted: Boolean) {
+        viewModelScope.launch {
+            repository.toggleSrsTaskCompleted(id, isCompleted)
+        }
+    }
+
+    fun deleteSrsTask(id: String) {
+        viewModelScope.launch {
+            repository.deleteSrsTask(id)
+            _toastMessage.value = "Задание удалено"
+        }
     }
 
     fun selectTimetableDay(day: DayOfWeek) {
@@ -169,47 +214,20 @@ class MainViewModel(
         _selectedParityFilter.value = parity
     }
 
-    fun selectChatChannel(channelId: String) {
-        _selectedChatChannel.value = channelId
-        repository.setActiveChannel(channelId)
-    }
-
-    fun openFriendSchedule(friend: FriendUser?) {
-        _viewingFriendSchedule.value = friend
-    }
-
-    fun openFriendChat(friendId: String) {
-        _selectedChatChannel.value = friendId
-        _currentTab.value = 3 // Chat tab
-    }
-
-    fun sendMessage(channelId: String, text: String) {
-        repository.sendMessage(channelId, text)
-    }
-
-    fun createGroupChat(name: String, memberFriendIds: List<String>) {
-        val group = repository.createGroupChat(name, memberFriendIds)
-        _selectedChatChannel.value = group.id
-        _toastMessage.value = "Группа «${group.name}» создана"
-    }
-
-    fun deleteGroupChat(groupId: String) {
-        repository.deleteGroupChat(groupId)
-        if (_selectedChatChannel.value == groupId) {
-            _selectedChatChannel.value = ""
-        }
-        _toastMessage.value = "Групповой чат удалён"
-    }
-
     fun setAttendance(classId: String, date: LocalDate, status: AttendanceStatus) {
         val dateStr = date.toString()
+        val prevStatus = repository.getAttendanceStatus(classId, dateStr)
         repository.setAttendance(classId, dateStr, status)
+        if (status == AttendanceStatus.MISSED && prevStatus != AttendanceStatus.MISSED) {
+            incrementSkip(classId)
+        } else if (prevStatus == AttendanceStatus.MISSED && status != AttendanceStatus.MISSED) {
+            decrementSkip(classId)
+        }
     }
 
-    fun shareScheduleToChat(channelId: String, classes: List<ClassSlot>, title: String) {
-        val text = repository.formatScheduleForSharing(classes, title)
-        repository.sendMessage(channelId, text)
-        _toastMessage.value = "Расписание отправлено в чат"
+    fun setBellPreset(preset: BellSchedulePreset) {
+        repository.setBellPreset(preset)
+        _toastMessage.value = "Сетка звонков: ${preset.title}"
     }
 
     fun saveClass(slot: ClassSlot) {
@@ -240,30 +258,41 @@ class MainViewModel(
         }
     }
 
-    suspend fun addFriend(handle: String): Boolean {
-        val (success, message) = repository.addFriendByHandle(handle)
-        _toastMessage.value = message
-        return success
-    }
-
-    suspend fun isHandleTaken(handle: String): Boolean {
-        return repository.isHandleTaken(handle)
-    }
-
-    fun addFriendInBg(handle: String) {
+    fun incrementSkip(classId: String) {
         viewModelScope.launch {
-            addFriend(handle)
+            repository.incrementSkip(classId)
         }
     }
 
-    fun syncWithCloud() {
-        repository.pushMyProfileToCloud(currentClassStatus.value)
-        _toastMessage.value = "Синхронизация с Firebase выполнена"
+    fun decrementSkip(classId: String) {
+        viewModelScope.launch {
+            repository.decrementSkip(classId)
+        }
     }
 
-    fun removeFriend(id: String) {
-        repository.removeFriend(id)
-        _toastMessage.value = "Друг удалён из списка"
+    fun updateAllowedSkips(classId: String, allowed: Int) {
+        viewModelScope.launch {
+            repository.updateAllowedSkips(classId, allowed)
+        }
+    }
+
+    fun importClasses(classes: List<ClassSlot>) {
+        viewModelScope.launch {
+            classes.forEach { slot ->
+                repository.addOrUpdateClass(slot)
+            }
+            _toastMessage.value = "Импортировано пар: ${classes.size}"
+        }
+    }
+
+    fun setAutoSilentMode(enabled: Boolean) {
+        repository.setAutoSilentMode(enabled)
+        _toastMessage.value = if (enabled) "Авто-беззвучный режим включен" else "Авто-беззвучный режим выключен"
+    }
+
+    fun updateBellSlots(slots: List<BellSlot>) {
+        repository.saveBellSlots(slots)
+        _toastMessage.value = "Сетка звонков успешно обновлена"
     }
 
     fun clearToast() {

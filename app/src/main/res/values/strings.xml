@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">StudySync</string>
     <string name="notification_channel_name">Напоминания о парах</string>
+    <string name="widget_description">Виджет текущей и следующей пары</string>
 </resources>

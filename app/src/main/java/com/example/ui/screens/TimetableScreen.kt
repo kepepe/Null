@@ -1,7 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,13 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MeetingRoom
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,15 +20,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.example.model.*
+import com.example.ui.components.BellsScheduleBottomSheet
+import com.example.ui.components.ScheduleWindowItemCard
+import com.example.ui.components.ShareScheduleDialog
 import com.example.ui.theme.*
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
+
+private sealed interface TimetableDisplayItem {
+    data class ClassItem(val slot: ClassSlot) : TimetableDisplayItem
+    data class WindowItem(val window: ScheduleWindow) : TimetableDisplayItem
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,15 +42,17 @@ fun TimetableScreen(
     allClasses: List<ClassSlot>,
     selectedDay: DayOfWeek,
     selectedParity: WeekParity,
+    bellSchedule: List<BellSlot> = standardBellSchedule,
     attendanceMap: Map<String, AttendanceStatus> = emptyMap(),
-    friends: List<FriendUser> = emptyList(),
-    groupChats: List<GroupChat> = emptyList(),
     onSelectDay: (DayOfWeek) -> Unit,
     onSelectParity: (WeekParity) -> Unit,
     onEditClass: (ClassSlot) -> Unit,
     onAddNewClass: () -> Unit,
     onSetAttendance: (String, LocalDate, AttendanceStatus) -> Unit = { _, _, _ -> },
-    onShareSchedule: (channelId: String, classes: List<ClassSlot>, title: String) -> Unit = { _, _, _ -> },
+    onIncrementSkip: (String) -> Unit = {},
+    onDecrementSkip: (String) -> Unit = {},
+    onImportClasses: (List<ClassSlot>) -> Unit = {},
+    onOpenEditBells: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val days = listOf(
@@ -63,7 +65,6 @@ fun TimetableScreen(
     )
 
     val russianLocale = Locale("ru", "RU")
-
     var showBellsSheet by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
 
@@ -74,6 +75,33 @@ fun TimetableScreen(
             .sortedBy { it.startTime }
     }
 
+    // Build items with windows between classes
+    val timetableItems = remember(dayFilteredClasses) {
+        val items = mutableListOf<TimetableDisplayItem>()
+        for (i in dayFilteredClasses.indices) {
+            val slot = dayFilteredClasses[i]
+            items.add(TimetableDisplayItem.ClassItem(slot))
+            if (i < dayFilteredClasses.size - 1) {
+                val nextSlot = dayFilteredClasses[i + 1]
+                val gapMinutes = java.time.Duration.between(slot.endTime, nextSlot.startTime).toMinutes()
+                if (gapMinutes >= 15) {
+                    items.add(
+                        TimetableDisplayItem.WindowItem(
+                            ScheduleWindow(
+                                previousSlot = slot,
+                                nextSlot = nextSlot,
+                                startTime = slot.endTime,
+                                endTime = nextSlot.startTime,
+                                durationMinutes = gapMinutes
+                            )
+                        )
+                    )
+                }
+            }
+        }
+        items
+    }
+
     // Determine representative date for the selected day of this week
     val today = remember { LocalDate.now() }
     val selectedDayDate = remember(selectedDay) {
@@ -81,10 +109,9 @@ fun TimetableScreen(
             .plusDays((selectedDay.value - 1).toLong())
     }
 
-    // Attendance stats
+    // Attendance & Skip stats for the current day
     val totalMarked = attendanceMap.values.count { it != AttendanceStatus.NOT_MARKED }
     val attendedCount = attendanceMap.values.count { it == AttendanceStatus.ATTENDED }
-    val missedCount = attendanceMap.values.count { it == AttendanceStatus.MISSED }
     val attendanceRate = if (totalMarked > 0) (attendedCount * 100) / totalMarked else 100
 
     Scaffold(
@@ -95,12 +122,15 @@ fun TimetableScreen(
                 onClick = onAddNewClass,
                 containerColor = BentoPrimary,
                 contentColor = BentoOnPrimary,
-                shape = CircleShape,
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
-                    .padding(bottom = 76.dp)
+                    .padding(bottom = 12.dp)
                     .testTag("fab_add_class")
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Добавить пару")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Добавить пару"
+                )
             }
         }
     ) { innerPadding ->
@@ -110,24 +140,26 @@ fun TimetableScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Header row with Title and Quick Actions (Bells & Share)
+            // Timetable Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column {
                     Text(
-                        text = "Расписание пар",
+                        text = "Расписание",
                         style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = BentoPrimary
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 26.sp,
+                            color = BentoPrimary,
+                            letterSpacing = (-0.5).sp
                         )
                     )
                     Text(
-                        text = "Пары, звонки, перемены и посещаемость",
+                        text = "Пары, звонки, окна и счётчик пропусков",
                         style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
                     )
                 }
@@ -145,14 +177,14 @@ fun TimetableScreen(
                         )
                     }
 
-                    // Share schedule to chat trigger
+                    // Share schedule (QR and link) trigger
                     IconButton(
                         onClick = { showShareDialog = true },
                         modifier = Modifier.testTag("btn_share_schedule")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Поделиться в чат",
+                            imageVector = Icons.Default.QrCode,
+                            contentDescription = "Поделиться расписанием (QR / Ссылка)",
                             tint = BentoPrimary
                         )
                     }
@@ -161,7 +193,7 @@ fun TimetableScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Overall Attendance Indicator Card
+            // Overall Attendance & Skips Indicator Card
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = BentoSurface,
@@ -182,102 +214,112 @@ fun TimetableScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "📊 Посещаемость:",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (attendanceRate >= 80) BentoGreenContainer else BentoCoralContainer
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(BentoGreenContainer),
+                            contentAlignment = Alignment.Center
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = BentoSuccessGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Column {
                             Text(
-                                text = "$attendanceRate%",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall.copy(
+                                text = "Посещаемость семестра: $attendanceRate%",
+                                style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    color = if (attendanceRate >= 80) BentoSuccessGreen else BentoCoral
+                                    color = BentoOnSurface
+                                )
+                            )
+                            Text(
+                                text = "Отмечено: $attendedCount из $totalMarked пар",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    color = BentoOnSurfaceVariant
                                 )
                             )
                         }
                     }
 
-                    Text(
-                        text = "Посещено $attendedCount • Пропусков $missedCount",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = BentoOnSurfaceVariant,
-                            fontSize = 11.sp
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = BentoPrimaryContainer
+                    ) {
+                        Text(
+                            text = "${dayFilteredClasses.size} пар",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPrimary
+                            )
                         )
-                    )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Week Parity Selector (Все недели, Нечётная, Чётная)
+            // Parity Filter Chips
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 WeekParity.values().forEach { parity ->
                     val isSelected = selectedParity == parity
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) BentoPrimary else BentoSurface,
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(if (isSelected) BentoPrimary else BentoBorderLight),
-                            width = 1.dp
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onSelectParity(parity) }
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectParity(parity) },
+                        label = {
                             Text(
                                 text = parity.displayName,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = if (isSelected) BentoOnPrimary else BentoOnSurfaceVariant
-                                )
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
-                        }
-                    }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = BentoPrimary,
+                            selectedLabelColor = BentoOnPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Day Selector Tabs
+            // Days of Week Strip (Пн - Сб)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 days.forEach { (day, label) ->
                     val isSelected = selectedDay == day
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (isSelected) BentoPrimaryContainer else BentoSurface,
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(if (isSelected) BentoBorderContainer else BentoBorderLight),
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isSelected) BentoPrimary else BentoSurface,
+                        border = if (!isSelected) CardDefaults.outlinedCardBorder().copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
                             width = 1.dp
-                        ),
+                        ) else null,
                         modifier = Modifier
                             .weight(1f)
+                            .padding(horizontal = 2.dp)
                             .clickable { onSelectDay(day) }
-                            .testTag("day_tab_${day.name}")
+                            .testTag("day_chip_${day.name}")
                     ) {
                         Column(
-                            modifier = Modifier.padding(vertical = 10.dp),
+                            modifier = Modifier.padding(vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = label,
                                 style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                    color = if (isSelected) BentoOnPrimaryContainer else BentoOnSurfaceVariant
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) BentoOnPrimary else BentoOnSurfaceVariant
                                 )
                             )
                         }
@@ -287,161 +329,72 @@ fun TimetableScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Class List
+            // Class and Window List
             if (dayFilteredClasses.isEmpty()) {
-                val fullDayName = selectedDay.getDisplayName(TextStyle.FULL, russianLocale)
-                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(russianLocale) else it.toString() }
-
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                        .weight(1f)
+                        .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 24.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "На $fullDayName пар нет",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Нажмите «+» внизу, чтобы добавить лекцию, семинар или лабораторную в этот день",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = BentoOnSurfaceVariant,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            text = "🎉 Выходной день!",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = BentoOnSurfaceVariant
                             )
                         )
+                        Text(
+                            text = "В этот день занятий не запланировано",
+                            style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        FilledTonalButton(
+                            onClick = onAddNewClass,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Добавить пару")
+                        }
                     }
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 120.dp)
                 ) {
-                    items(dayFilteredClasses, key = { it.id }) { slot ->
-                        val attendanceKey = "${slot.id}_$selectedDayDate"
-                        val currentAttendance = attendanceMap[attendanceKey] ?: AttendanceStatus.NOT_MARKED
+                    items(timetableItems, key = {
+                        when (it) {
+                            is TimetableDisplayItem.ClassItem -> "class_${it.slot.id}"
+                            is TimetableDisplayItem.WindowItem -> "window_${it.window.startTime}_${it.window.endTime}"
+                        }
+                    }) { item ->
+                        when (item) {
+                            is TimetableDisplayItem.ClassItem -> {
+                                val slot = item.slot
+                                val attendanceKey = "${slot.id}_$selectedDayDate"
+                                val currentAttendance = attendanceMap[attendanceKey] ?: AttendanceStatus.NOT_MARKED
 
-                        TimetableClassCard(
-                            slot = slot,
-                            attendanceStatus = currentAttendance,
-                            onEdit = { onEditClass(slot) },
-                            onStatusChange = { newStatus ->
-                                onSetAttendance(slot.id, selectedDayDate, newStatus)
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // Bell Schedule Bottom Sheet
-    if (showBellsSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showBellsSheet = false },
-            containerColor = BentoSurface,
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "🔔 Звонки и перемены",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = BentoPrimary
-                            )
-                        )
-                        Text(
-                            text = "Сетка учебных пар и длительность перемен",
-                            style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
-                        )
-                    }
-                    IconButton(onClick = { showBellsSheet = false }) {
-                        Icon(Icons.Default.Close, contentDescription = "Закрыть")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                standardBellSchedule.forEach { bell ->
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = BentoSurfaceVariant.copy(alpha = 0.5f),
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
-                            width = 1.dp
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = BentoPrimary,
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = "${bell.pairNumber}",
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                color = BentoOnPrimary
-                                            )
-                                        )
-                                    }
-                                }
-
-                                Column {
-                                    Text(
-                                        text = "${bell.pairNumber} пара",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                                    )
-                                    Text(
-                                        text = bell.formattedTimeSpan,
-                                        style = MaterialTheme.typography.bodySmall.copy(color = BentoPrimary)
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (bell.breakAfterMinutes >= 20) BentoCoralContainer else BentoSurface
-                            ) {
-                                Text(
-                                    text = bell.breakDescription,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = FontWeight.Medium,
-                                        color = if (bell.breakAfterMinutes >= 20) BentoCoral else BentoOnSurfaceVariant
-                                    )
+                                TimetableClassCard(
+                                    slot = slot,
+                                    attendanceStatus = currentAttendance,
+                                    onEdit = { onEditClass(slot) },
+                                    onStatusChange = { newStatus ->
+                                        onSetAttendance(slot.id, selectedDayDate, newStatus)
+                                    },
+                                    onIncrementSkip = { onIncrementSkip(slot.id) },
+                                    onDecrementSkip = { onDecrementSkip(slot.id) }
                                 )
                             }
+                            is TimetableDisplayItem.WindowItem -> {
+                                ScheduleWindowItemCard(window = item.window)
+                            }
                         }
                     }
                 }
@@ -449,104 +402,24 @@ fun TimetableScreen(
         }
     }
 
-    // Share Schedule Dialog
+    // Bells Schedule Modal Sheet
+    if (showBellsSheet) {
+        BellsScheduleBottomSheet(
+            onDismiss = { showBellsSheet = false },
+            bellSchedule = bellSchedule,
+            onConfigureBells = onOpenEditBells
+        )
+    }
+
+    // QR & Link Share Dialog
     if (showShareDialog) {
-        val fullDayName = selectedDay.getDisplayName(TextStyle.FULL, russianLocale)
-            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(russianLocale) else it.toString() }
-
-        Dialog(onDismissRequest = { showShareDialog = false }) {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = BentoSurface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Отправить расписание",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = "Выберите друга или группу для отправки расписания на $fullDayName (${dayFilteredClasses.size} пар):",
-                        style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
-                    )
-
-                    if (friends.isEmpty() && groupChats.isEmpty()) {
-                        Text(
-                            text = "У вас пока нет друзей или групп. Добавьте друзей во вкладке «Друзья».",
-                            style = MaterialTheme.typography.bodySmall.copy(color = BentoCoral)
-                        )
-                    } else {
-                        // Group Chats
-                        if (groupChats.isNotEmpty()) {
-                            Text(
-                                text = "Групповые чаты:",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                            groupChats.forEach { grp ->
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = BentoSurfaceVariant,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onShareSchedule(grp.id, dayFilteredClasses, "Расписание на $fullDayName")
-                                            showShareDialog = false
-                                        }
-                                ) {
-                                    Text(
-                                        text = "👥 ${grp.name}",
-                                        modifier = Modifier.padding(10.dp),
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Friends
-                        if (friends.isNotEmpty()) {
-                            Text(
-                                text = "Друзья:",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                            friends.forEach { friend ->
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = BentoSurfaceVariant,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onShareSchedule(friend.id, dayFilteredClasses, "Расписание на $fullDayName")
-                                            showShareDialog = false
-                                        }
-                                ) {
-                                    Text(
-                                        text = "💬 ${friend.displayName} (${friend.handle})",
-                                        modifier = Modifier.padding(10.dp),
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showShareDialog = false }) {
-                            Text("Закрыть")
-                        }
-                    }
-                }
+        ShareScheduleDialog(
+            allClasses = allClasses,
+            onDismiss = { showShareDialog = false },
+            onImportClasses = { imported ->
+                onImportClasses(imported)
             }
-        }
+        )
     }
 }
 
@@ -556,6 +429,8 @@ fun TimetableClassCard(
     attendanceStatus: AttendanceStatus = AttendanceStatus.NOT_MARKED,
     onEdit: () -> Unit,
     onStatusChange: (AttendanceStatus) -> Unit = {},
+    onIncrementSkip: () -> Unit = {},
+    onDecrementSkip: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val (typeBg, typeFg) = when (slot.classType) {
@@ -589,7 +464,7 @@ fun TimetableClassCard(
             Box(
                 modifier = Modifier
                     .width(6.dp)
-                    .height(140.dp)
+                    .height(170.dp)
                     .clip(RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp))
                     .background(tagColor)
             )
@@ -648,6 +523,7 @@ fun TimetableClassCard(
                             .clip(CircleShape)
                             .background(tagColor)
                     )
+
                     Text(
                         text = slot.subjectTitle,
                         style = MaterialTheme.typography.titleMedium.copy(
@@ -699,6 +575,79 @@ fun TimetableClassCard(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Лимит допустимых пропусков за семестр
+                val isExceeded = slot.skippedCount >= slot.allowedSkips && slot.allowedSkips > 0
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = when {
+                        isExceeded -> Color(0xFFFFEBEE)
+                        else -> BentoSurfaceVariant
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Лимит допустимых пропусков за семестр:",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        color = BentoOnSurfaceVariant
+                                    )
+                                )
+                                Text(
+                                    text = "${slot.allowedSkips}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = BentoPrimary
+                                    )
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Пропусков:",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = BentoOnSurfaceVariant
+                                    )
+                                )
+                                Text(
+                                    text = "${slot.skippedCount} из ${slot.allowedSkips}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Black,
+                                        color = if (isExceeded) Color(0xFFC62828) else BentoPrimary
+                                    )
+                                )
+                                if (isExceeded) {
+                                    Text(
+                                        text = "• ⚠️ Лимит исчерпан!",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFC62828)
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 // Interactive Attendance Tracking Bar (Индикатор посещаемости)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -706,7 +655,7 @@ fun TimetableClassCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Посещение:",
+                        text = "Посещение сегодня:",
                         style = MaterialTheme.typography.labelSmall.copy(
                             color = BentoOnSurfaceVariant,
                             fontWeight = FontWeight.Medium
@@ -786,4 +735,3 @@ fun TimetableClassCard(
         }
     }
 }
-

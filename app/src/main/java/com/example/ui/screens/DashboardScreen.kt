@@ -27,9 +27,9 @@ import coil.compose.AsyncImage
 import com.example.domain.ObserveCurrentClassUseCase
 import com.example.model.*
 import com.example.ui.components.BentoActionCard
-import com.example.ui.components.BentoFriendsCard
 import com.example.ui.components.BentoLiveClassCard
 import com.example.ui.components.BentoNextUpCard
+import com.example.ui.components.BentoSkipsSummaryCard
 import com.example.ui.theme.*
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -38,11 +38,10 @@ import java.util.Locale
 @Composable
 fun DashboardScreen(
     currentStatus: CurrentClassStatus,
-    friends: List<FriendUser>,
+    windows: List<ScheduleWindow>,
+    allClasses: List<ClassSlot>,
     userProfile: UserProfile,
-    allClassesCount: Int,
     onOpenSchedule: () -> Unit,
-    onOpenFriends: () -> Unit,
     onOpenProfile: () -> Unit,
     onAddNewClass: () -> Unit,
     onToggleParityMode: () -> Unit,
@@ -74,7 +73,7 @@ fun DashboardScreen(
             val firstName = userProfile.name.trim().split(" ").firstOrNull() ?: userProfile.name
             "Привет, $firstName"
         } else {
-            "StudySync"
+            "Моё Расписание"
         }
 
         val (statusText, statusFg, statusBg) = when (currentStatus) {
@@ -83,11 +82,19 @@ fun DashboardScreen(
                 BentoSuccessGreen,
                 BentoGreenContainer
             )
-            is CurrentClassStatus.FreePeriod -> Triple(
-                "Перемена",
-                BentoCoral,
-                BentoCoralContainer
-            )
+            is CurrentClassStatus.FreePeriod -> if (currentStatus.isBeforeFirstClass) {
+                Triple(
+                    "Отдых перед парами ☕",
+                    BentoSuccessGreen,
+                    BentoGreenContainer
+                )
+            } else {
+                Triple(
+                    "Перемена",
+                    BentoCoral,
+                    BentoCoralContainer
+                )
+            }
             is CurrentClassStatus.DoneForToday -> Triple(
                 "Закончил учиться 🎉",
                 BentoPrimary,
@@ -179,7 +186,7 @@ fun DashboardScreen(
                 }
             }
 
-            // Row 2: Status & Parity Badges (separate row so neither is squished)
+            // Row 2: Status & Parity Badges
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -257,7 +264,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 1. Hero Card: Current/Live Class Status (With rich large icons)
+        // 1. Hero Card: Current/Live Class Status (with progress bar and timer to end of class)
         BentoLiveClassCard(
             status = currentStatus,
             onClick = onOpenSchedule
@@ -265,27 +272,24 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 2. Bento 2-Column Split: Next Up & Friends
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            BentoNextUpCard(
-                nextSlot = nextSlot,
-                onClick = onOpenSchedule,
-                modifier = Modifier.weight(1f)
-            )
-
-            BentoFriendsCard(
-                friends = friends,
-                onClick = onOpenFriends,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        // 2. Next Up Card
+        BentoNextUpCard(
+            nextSlot = nextSlot,
+            onClick = onOpenSchedule,
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 3. Col-Span-2: Add Class Quick Action
+        // 3. Skip Counter Summary Card
+        BentoSkipsSummaryCard(
+            allClasses = allClasses,
+            onClick = onOpenSchedule
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 4. Add Class Quick Action
         BentoActionCard(
             onAddClassClick = onAddNewClass
         )
