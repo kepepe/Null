@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
                 val viewingFriendSchedule by viewModel.viewingFriendSchedule.collectAsStateWithLifecycle()
                 val selectedDay by viewModel.selectedTimetableDay.collectAsStateWithLifecycle()
                 val selectedParity by viewModel.selectedParityFilter.collectAsStateWithLifecycle()
+                val subjectPresets by viewModel.subjectPresets.collectAsStateWithLifecycle()
                 val toastMessage by viewModel.toastMessage.collectAsStateWithLifecycle()
 
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -195,6 +196,7 @@ class MainActivity : ComponentActivity() {
                         AddEditClassDialog(
                             initialSlot = editingSlot,
                             defaultDay = selectedDay,
+                            subjectPresets = subjectPresets,
                             onDismiss = {
                                 showAddEditDialog = false
                                 editingSlot = null

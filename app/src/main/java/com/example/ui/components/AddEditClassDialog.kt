@@ -36,6 +36,7 @@ import java.util.UUID
 fun AddEditClassDialog(
     initialSlot: ClassSlot? = null,
     defaultDay: DayOfWeek = DayOfWeek.MONDAY,
+    subjectPresets: List<SubjectPreset> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (ClassSlot) -> Unit,
     onDelete: ((String) -> Unit)? = null
@@ -56,6 +57,17 @@ fun AddEditClassDialog(
         mutableStateOf(initialSlot?.colorHex ?: subjectColorPalette.first().first)
     }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val activeSuggestions = remember(subjectTitle, subjectPresets) {
+        if (subjectTitle.isBlank()) {
+            subjectPresets.take(8)
+        } else {
+            subjectPresets.filter {
+                it.title.contains(subjectTitle.trim(), ignoreCase = true) &&
+                !it.title.equals(subjectTitle.trim(), ignoreCase = true)
+            }.take(6)
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -118,6 +130,55 @@ fun AddEditClassDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                // Autocomplete Subject Presets from Memory
+                if (activeSuggestions.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "💡 Подсказка (нажмите для автозаполнения):",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPrimary
+                            )
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(activeSuggestions) { preset ->
+                                SuggestionChip(
+                                    onClick = {
+                                        subjectTitle = preset.title
+                                        if (preset.professor.isNotBlank()) professor = preset.professor
+                                        if (preset.classroom.isNotBlank()) classroom = preset.classroom
+                                        classType = preset.classType
+                                        selectedColorHex = preset.colorHex
+                                        errorMessage = null
+                                    },
+                                    label = {
+                                        Text(
+                                            text = preset.title,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    },
+                                    icon = {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    runCatching { Color(android.graphics.Color.parseColor(preset.colorHex)) }
+                                                        .getOrDefault(BentoPrimary)
+                                                )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // Professor
                 OutlinedTextField(

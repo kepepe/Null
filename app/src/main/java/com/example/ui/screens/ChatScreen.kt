@@ -58,7 +58,8 @@ fun ChatScreen(
 
     // Ensure valid channel is selected if possible
     LaunchedEffect(currentChannelId, friends, groupChats) {
-        val channelExists = groupChats.any { it.id == currentChannelId } || friends.any { it.id == currentChannelId }
+        val channelExists = groupChats.any { it.id == currentChannelId } ||
+                friends.any { it.id == currentChannelId || it.handle.equals(currentChannelId, ignoreCase = true) }
         if (!channelExists) {
             if (groupChats.isNotEmpty()) {
                 onSelectChannel(groupChats.first().id)
@@ -68,8 +69,18 @@ fun ChatScreen(
         }
     }
 
+    LaunchedEffect(currentChannelId) {
+        if (currentChannelId.isNotBlank()) {
+            onSelectChannel(currentChannelId)
+        }
+    }
+
     val activeGroup = groupChats.firstOrNull { it.id == currentChannelId }
-    val activeFriend = friends.firstOrNull { it.id == currentChannelId }
+    val activeFriend = friends.firstOrNull {
+        it.id == currentChannelId ||
+                it.handle.equals(currentChannelId, ignoreCase = true) ||
+                it.handle.trim().lowercase().removePrefix("@") == currentChannelId.trim().lowercase().removePrefix("@")
+    }
 
     val activeTitle = when {
         activeGroup != null -> activeGroup.name
@@ -87,9 +98,12 @@ fun ChatScreen(
         else -> "Нажмите на друга или создайте группу"
     }
 
-    val filteredMessages = remember(chatMessages, currentChannelId) {
+    val filteredMessages = remember(chatMessages, currentChannelId, activeFriend) {
         if (currentChannelId.isBlank()) emptyList()
-        else chatMessages.filter { it.channelId == currentChannelId }
+        else chatMessages.filter {
+            it.channelId == currentChannelId ||
+                    (activeFriend != null && (it.channelId == activeFriend.id || it.channelId == activeFriend.handle))
+        }
     }
 
     LaunchedEffect(filteredMessages.size) {
@@ -120,7 +134,7 @@ fun ChatScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Чаты",
                     style = MaterialTheme.typography.headlineMedium.copy(
@@ -129,10 +143,14 @@ fun ChatScreen(
                     )
                 )
                 Text(
-                    text = "Личные диалоги с друзьями и созданные группы",
-                    style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
+                    text = "Диалоги с друзьями и группы",
+                    style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             // Button to open Create Group Dialog
             FilledTonalButton(
@@ -153,7 +171,8 @@ fun ChatScreen(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "+ Группа",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1
                 )
             }
         }

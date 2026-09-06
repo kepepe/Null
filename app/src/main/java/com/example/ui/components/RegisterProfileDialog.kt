@@ -146,12 +146,20 @@ fun RegisterProfileDialog(
 
                 OutlinedTextField(
                     value = handle,
-                    onValueChange = {
-                        handle = it
+                    onValueChange = { input ->
+                        val withoutAt = input.removePrefix("@").lowercase()
+                        val filtered = withoutAt.filter { c -> (c in 'a'..'z') || (c in '0'..'9') || c == '_' }.take(20)
+                        handle = if (filtered.isEmpty()) "" else "@$filtered"
                         errorText = null
                     },
                     label = { Text("Никнейм (@тег)") },
-                    placeholder = { Text("напр. @kirill_v") },
+                    placeholder = { Text("@kirill_v") },
+                    supportingText = {
+                        Text(
+                            text = "Только латинские буквы, цифры и _ (от 3 до 20 симв.)",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("reg_handle_input"),
@@ -197,11 +205,16 @@ fun RegisterProfileDialog(
                                 errorText = "Пожалуйста, введите ваше имя"
                                 return@Button
                             }
-                            if (handle.isBlank()) {
-                                errorText = "Пожалуйста, укажите никнейм"
+                            val clean = handle.removePrefix("@").trim().lowercase()
+                            if (clean.length < 3) {
+                                errorText = "Тег должен содержать минимум 3 символа (напр. @alex)"
                                 return@Button
                             }
-                            onRegister(name.trim(), handle.trim(), university.trim(), avatarUri)
+                            if (!clean.matches(Regex("^[a-z0-9_]{3,20}$"))) {
+                                errorText = "Недопустимый тег. Разрешены только латинские буквы, цифры и _"
+                                return@Button
+                            }
+                            onRegister(name.trim(), "@$clean", university.trim(), avatarUri)
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary),

@@ -64,6 +64,13 @@ class MainViewModel(
             initialValue = emptyList()
         )
 
+    val subjectPresets: StateFlow<List<SubjectPreset>> = repository.subjectPresetsFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     val attendanceMap: StateFlow<Map<String, AttendanceStatus>> = repository.attendanceFlow
         .stateIn(
             scope = viewModelScope,
@@ -237,6 +244,10 @@ class MainViewModel(
         val (success, message) = repository.addFriendByHandle(handle)
         _toastMessage.value = message
         return success
+    }
+
+    suspend fun isHandleTaken(handle: String): Boolean {
+        return repository.isHandleTaken(handle)
     }
 
     fun addFriendInBg(handle: String) {

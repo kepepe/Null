@@ -62,19 +62,27 @@ fun AddFriendDialog(
                 }
 
                 Text(
-                    text = "Введите @тег друга. Приложение найдёт его профиль и расписание в реальном времени через Google Firebase или каталог вуза.",
+                    text = "Введите точный @тег друга. Поиск осуществляется только по зарегистрированным студентам в облачной базе данных.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 OutlinedTextField(
                     value = inputQuery,
-                    onValueChange = {
-                        inputQuery = it
+                    onValueChange = { input ->
+                        val withoutAt = input.removePrefix("@").lowercase()
+                        val filtered = withoutAt.filter { c -> (c in 'a'..'z') || (c in '0'..'9') || c == '_' }.take(20)
+                        inputQuery = if (filtered.isEmpty()) "" else "@$filtered"
                         errorMessage = null
                     },
                     label = { Text("Никнейм (@тег) друга") },
-                    placeholder = { Text("напр. @maria_n или @alex_sm") },
+                    placeholder = { Text("@maria_n или @alex_sm") },
+                    supportingText = {
+                        Text(
+                            text = "Только точный тег (латинские буквы, цифры и _)",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("friend_query_input"),
@@ -105,18 +113,19 @@ fun AddFriendDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            if (inputQuery.isBlank()) {
-                                errorMessage = "Пожалуйста, введите никнейм друга"
+                            val clean = inputQuery.removePrefix("@").trim().lowercase()
+                            if (clean.length < 3) {
+                                errorMessage = "Введите корректный тег (минимум 3 символа, напр. @alex_sm)"
                                 return@Button
                             }
                             isLoading = true
                             scope.launch {
-                                val added = onAddFriend(inputQuery.trim())
+                                val added = onAddFriend("@$clean")
                                 isLoading = false
                                 if (added) {
                                     onDismiss()
                                 } else {
-                                    errorMessage = "Не удалось найти или уже в списке"
+                                    errorMessage = "Студент с тегом @$clean не найден в базе данных или уже в списке"
                                 }
                             }
                         },

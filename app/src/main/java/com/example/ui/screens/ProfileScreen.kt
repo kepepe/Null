@@ -701,7 +701,7 @@ fun ProfileScreen(
                             }
                         }
                         Text(
-                            text = "Синхронизация друзей, пар и чата онлайн",
+                            text = "Автоматическое сохранение в облаке в реальном времени",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = BentoOnPrimaryContainer,
                                 fontSize = 11.sp
@@ -710,22 +710,29 @@ fun ProfileScreen(
                     }
                 }
 
-                FilledTonalButton(
-                    onClick = onSyncWithCloud,
+                Surface(
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = BentoPrimary,
-                        contentColor = Color.White
-                    ),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    color = BentoGreenContainer,
+                    modifier = Modifier.padding(start = 6.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Sync,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Синхр.", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = BentoSuccessGreen,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Авто",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BentoSuccessGreen
+                        )
+                    }
                 }
             }
         }

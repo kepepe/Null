@@ -52,6 +52,10 @@ class ScheduleRepository(
     private val _attendanceFlow = MutableStateFlow<Map<String, AttendanceStatus>>(loadAttendance())
     val attendanceFlow: Flow<Map<String, AttendanceStatus>> = _attendanceFlow.asStateFlow()
 
+    // Subject Presets & Memory Suggestions for fast schedule adding
+    private val _subjectPresetsFlow = MutableStateFlow<List<SubjectPreset>>(loadSubjectPresets())
+    val subjectPresetsFlow: Flow<List<SubjectPreset>> = _subjectPresetsFlow.asStateFlow()
+
     private var currentActiveChannelId: String = ""
 
     // Sample schedules for directory friends
@@ -145,25 +149,75 @@ class ScheduleRepository(
     )
 
     init {
+        // Auto-sync profile to cloud on app launch if user has registered
+        if (_userProfileFlow.value.isRegistered && _userProfileFlow.value.handle.isNotBlank()) {
+            pushMyProfileToCloud()
+        }
+        // Seed directory users to Firestore so classmates exist in cloud database
+        seedCampusDirectoryToFirestore()
         // Observe and sync presence of active friends from Firestore in background
         syncFriendsFromFirestore()
+        observeGroupChatsFromCloud()
+    }
+
+    private fun seedCampusDirectoryToFirestore() {
+        repoScope.launch {
+            try {
+                campusDirectory.forEach { friend ->
+                    val clean = friend.handle.trim().lowercase().removePrefix("@")
+                    firebaseService.publishUserProfile(
+                        userId = friend.id,
+                        profile = UserProfile(
+                            isRegistered = true,
+                            name = friend.displayName,
+                            handle = friend.handle,
+                            university = "СПбПУ / ИТМО"
+                        ),
+                        currentClasses = friend.schedule,
+                        currentStatus = if (friend.isAttendingClass && friend.currentClass != null) {
+                            val slot = friend.schedule.firstOrNull { it.subjectTitle == friend.currentClass } ?: friend.schedule.first()
+                            CurrentClassStatus.ActiveClass(slot, 45L, friend.schedule.getOrNull(1))
+                        } else CurrentClassStatus.NoClassesToday
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w("ScheduleRepository", "Campus directory seeding notice: ${e.message}")
+            }
+        }
     }
 
     private fun syncFriendsFromFirestore() {
         repoScope.launch {
             _friendsFlow.value.forEach { friend ->
-                if (!friend.id.startsWith("f")) { // Cloud friend
-                    launch {
-                        firebaseService.observeFriend(friend.id).collect { updatedFriend ->
-                            if (updatedFriend != null) {
-                                val current = _friendsFlow.value.toMutableList()
-                                val index = current.indexOfFirst { it.id == updatedFriend.id }
-                                if (index != -1) {
-                                    current[index] = updatedFriend
-                                    _friendsFlow.value = current
-                                }
+                launch {
+                    firebaseService.observeFriend(friend.id).collect { updatedFriend ->
+                        if (updatedFriend != null) {
+                            val current = _friendsFlow.value.toMutableList()
+                            val index = current.indexOfFirst { it.id == updatedFriend.id || it.handle.equals(updatedFriend.handle, ignoreCase = true) }
+                            if (index != -1) {
+                                current[index] = updatedFriend
+                                _friendsFlow.value = current
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun observeGroupChatsFromCloud() {
+        val myHandle = _userProfileFlow.value.handle
+        if (myHandle.isBlank()) return
+        repoScope.launch {
+            firebaseService.observeGroupChats(myHandle).collect { cloudGroups ->
+                if (cloudGroups.isNotEmpty()) {
+                    val local = _groupChatsFlow.value
+                    val localIds = local.map { it.id }.toSet()
+                    val newOnes = cloudGroups.filterNot { localIds.contains(it.id) }
+                    if (newOnes.isNotEmpty()) {
+                        val merged = local + newOnes
+                        _groupChatsFlow.value = merged
+                        saveGroupChats(merged)
                     }
                 }
             }
@@ -178,6 +232,7 @@ class ScheduleRepository(
 
     suspend fun addOrUpdateClass(slot: ClassSlot) {
         classDao.insertOrUpdate(ClassEntity.fromDomain(slot))
+        saveSubjectPreset(slot)
         pushMyProfileToCloud()
     }
 
@@ -281,26 +336,34 @@ class ScheduleRepository(
     }
 
     suspend fun addFriendByHandle(query: String): Pair<Boolean, String> {
-        val cleanQuery = query.trim().lowercase()
-        val normalized = if (cleanQuery.startsWith("@")) cleanQuery else "@$cleanQuery"
+        val cleanQuery = query.trim().lowercase().removePrefix("@")
+        if (cleanQuery.length < 2) {
+            return Pair(false, "Тег слишком короткий")
+        }
+        val normalized = "@$cleanQuery"
         val currentFriends = _friendsFlow.value
 
-        if (currentFriends.any { it.handle.lowercase() == normalized }) {
-            return Pair(false, "Этот друг уже в вашем списке!")
+        val myClean = _userProfileFlow.value.handle.trim().lowercase().removePrefix("@")
+        if (cleanQuery == myClean) {
+            return Pair(false, "Вы не можете добавить самого себя в друзья")
         }
 
-        // 1. Try finding in Firebase Cloud Firestore first
-        val cloudFriend = firebaseService.searchUserByHandle(normalized)
+        if (currentFriends.any { it.handle.trim().lowercase().removePrefix("@") == cleanQuery }) {
+            return Pair(false, "Пользователь $normalized уже есть в вашем списке друзей")
+        }
+
+        // Search strictly from Firebase Cloud Firestore
+        val cloudFriend = firebaseService.searchUserByHandle(cleanQuery)
         if (cloudFriend != null) {
             val updated = currentFriends + cloudFriend
             _friendsFlow.value = updated
             saveFriends(updated)
-            // Start observing this friend
+            // Start observing this friend in real-time
             repoScope.launch {
                 firebaseService.observeFriend(cloudFriend.id).collect { updatedFriend ->
                     if (updatedFriend != null) {
                         val curr = _friendsFlow.value.toMutableList()
-                        val idx = curr.indexOfFirst { it.id == updatedFriend.id }
+                        val idx = curr.indexOfFirst { it.id == updatedFriend.id || it.handle.equals(updatedFriend.handle, ignoreCase = true) }
                         if (idx != -1) {
                             curr[idx] = updatedFriend
                             _friendsFlow.value = curr
@@ -308,32 +371,11 @@ class ScheduleRepository(
                     }
                 }
             }
-            return Pair(true, "Друг ${cloudFriend.displayName} (${cloudFriend.handle}) найден в облаке Firebase!")
+            return Pair(true, "Студент ${cloudFriend.displayName} ($normalized) добавлен из базы данных!")
         }
 
-        // 2. Check local campus directory
-        val fromDirectory = campusDirectory.firstOrNull { it.handle.lowercase() == normalized }
-        val friendToAdd = fromDirectory ?: FriendUser(
-            id = UUID.randomUUID().toString(),
-            displayName = if (cleanQuery.contains("_")) {
-                cleanQuery.replace("@", "").replace("_", " ").split(" ").joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
-            } else {
-                "Студент ${cleanQuery.replace("@", "")}"
-            },
-            handle = normalized,
-            avatarInitials = cleanQuery.replace("@", "").take(2).uppercase(),
-            avatarBgColorHex = "#0061A4",
-            currentClass = "Физика (Семинар)",
-            currentRoom = "Ауд. 204",
-            classEndTime = "12:30",
-            isAttendingClass = true,
-            schedule = alexSchedule
-        )
-
-        val updated = currentFriends + friendToAdd
-        _friendsFlow.value = updated
-        saveFriends(updated)
-        return Pair(true, "Друг ${friendToAdd.displayName} успешно добавлен!")
+        // Strict rejection - random text will NOT add anyone!
+        return Pair(false, "Пользователь с тегом $normalized не найден в базе данных. Проверьте правильность тега.")
     }
 
     fun removeFriend(friendId: String) {
@@ -370,23 +412,44 @@ class ScheduleRepository(
         }
     }
 
+    private var channelObserverJob: kotlinx.coroutines.Job? = null
+
     // --- Chat Realtime Connection with Firebase ---
+
+    fun getCanonicalChatChannelId(targetIdOrHandle: String): String {
+        if (targetIdOrHandle.startsWith("grp_")) return targetIdOrHandle
+
+        val myHandle = _userProfileFlow.value.handle.trim().lowercase().removePrefix("@")
+            .ifBlank { "u_${myUserId.take(6)}" }
+        val friend = _friendsFlow.value.firstOrNull {
+            it.id == targetIdOrHandle ||
+                    it.handle.equals(targetIdOrHandle, ignoreCase = true) ||
+                    it.handle.trim().lowercase().removePrefix("@") == targetIdOrHandle.trim().lowercase().removePrefix("@")
+        }
+        val otherHandle = (friend?.handle ?: targetIdOrHandle).trim().lowercase().removePrefix("@")
+
+        val first = minOf(myHandle, otherHandle)
+        val second = maxOf(myHandle, otherHandle)
+        return "dm_${first}_${second}"
+    }
 
     fun setActiveChannel(channelId: String) {
         currentActiveChannelId = channelId
         if (channelId.isBlank()) return
 
-        // Listen to Firestore real-time collection
-        repoScope.launch {
-            firebaseService.observeMessages(channelId, myUserId).collect { cloudMessages ->
-                // Merge cloud messages with local ones
-                val localForChannel = _chatMessagesFlow.value.filter { it.channelId == channelId && !it.id.startsWith("msg_cloud_") }
-                val cloudIds = cloudMessages.map { it.id }.toSet()
-                val merged = (localForChannel.filterNot { cloudIds.contains(it.id) } + cloudMessages)
-                    .sortedBy { it.timestamp }
+        val canonicalId = getCanonicalChatChannelId(channelId)
+        val myHandle = _userProfileFlow.value.handle
 
+        channelObserverJob?.cancel()
+        channelObserverJob = repoScope.launch {
+            firebaseService.observeMessages(canonicalId, myUserId, myHandle).collect { cloudMessages ->
+                val mapped = cloudMessages.map { it.copy(channelId = channelId) }
+                val currentLocal = _chatMessagesFlow.value.filter { it.channelId == channelId }
+                val merged = (currentLocal + mapped).distinctBy { msg ->
+                    if (msg.id.isNotBlank()) msg.id else "${msg.senderHandle}_${msg.text}_${msg.timestamp}"
+                }
                 val otherChannels = _chatMessagesFlow.value.filter { it.channelId != channelId }
-                _chatMessagesFlow.value = otherChannels + merged
+                _chatMessagesFlow.value = (otherChannels + (if (mapped.isNotEmpty()) mapped else merged)).sortedBy { it.timestamp }
             }
         }
     }
@@ -394,9 +457,10 @@ class ScheduleRepository(
     fun sendMessage(channelId: String, text: String) {
         if (text.isBlank()) return
         val user = _userProfileFlow.value
-        val myName = if (user.name.isNotBlank()) user.name else "Я"
-        val myHandle = if (user.handle.isNotBlank()) user.handle else "@me"
+        val myName = if (user.name.isNotBlank()) user.name else "Студент"
+        val myHandle = if (user.handle.isNotBlank()) user.handle else "@student"
         val currentTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+        val canonicalId = getCanonicalChatChannelId(channelId)
 
         val localId = UUID.randomUUID().toString()
         val newMsg = ChatMessage(
@@ -412,10 +476,10 @@ class ScheduleRepository(
         )
         _chatMessagesFlow.value = _chatMessagesFlow.value + newMsg
 
-        // Send to Firebase Firestore
+        // Send to Firebase Firestore using canonicalId
         repoScope.launch {
             firebaseService.sendMessage(
-                channelId = channelId,
+                channelId = canonicalId,
                 text = text,
                 senderId = myUserId,
                 senderName = myName,
@@ -423,6 +487,66 @@ class ScheduleRepository(
                 senderAvatarUri = user.avatarUri,
                 timestampText = currentTime
             )
+        }
+
+        // Automatic smart response from classmate if chatting with a directory friend
+        val friend = _friendsFlow.value.firstOrNull {
+            it.id == channelId ||
+                    it.handle.equals(channelId, ignoreCase = true) ||
+                    it.handle.trim().lowercase().removePrefix("@") == channelId.trim().lowercase().removePrefix("@")
+        }
+        if (friend != null && !channelId.startsWith("grp_")) {
+            repoScope.launch {
+                kotlinx.coroutines.delay(1200)
+                val replyText = generateSmartStudentReply(friend, text)
+                val replyTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                val replyMsg = ChatMessage(
+                    id = UUID.randomUUID().toString(),
+                    channelId = channelId,
+                    senderName = friend.displayName,
+                    senderHandle = friend.handle,
+                    senderAvatarUri = friend.avatarUri,
+                    senderAvatarBgColorHex = friend.avatarBgColorHex,
+                    text = replyText,
+                    timestamp = replyTime,
+                    isFromMe = false
+                )
+                _chatMessagesFlow.value = _chatMessagesFlow.value + replyMsg
+                firebaseService.sendMessage(
+                    channelId = canonicalId,
+                    text = replyText,
+                    senderId = friend.id,
+                    senderName = friend.displayName,
+                    senderHandle = friend.handle,
+                    senderAvatarUri = friend.avatarUri,
+                    timestampText = replyTime
+                )
+            }
+        }
+    }
+
+    private fun generateSmartStudentReply(friend: FriendUser, userMessage: String): String {
+        val lower = userMessage.lowercase()
+        return when {
+            lower.contains("где") || lower.contains("аудитор") || lower.contains("пара") -> {
+                if (friend.isAttendingClass && friend.currentClass != null) {
+                    "Я сейчас на паре «${friend.currentClass}» в ${friend.currentRoom ?: "аудитории"} (до ${friend.classEndTime ?: "конца пары"}) 🎓"
+                } else {
+                    "Сейчас свободен, пар нет ☕ Встретимся в буфете или в коворкинге?"
+                }
+            }
+            lower.contains("конспект") || lower.contains("скинь") || lower.contains("материал") -> {
+                "Держи конспекты! Загрузил последние записи в общую папку 👍"
+            }
+            lower.contains("расписани") -> {
+                "Спасибо за расписание! Сверил со своим — совпадает на этой неделе 👍"
+            }
+            lower.contains("привет") || lower.contains("ку") || lower.contains("здравствуй") -> {
+                "Привет! Как успехи на парах сегодня?"
+            }
+            else -> {
+                "Привет! Сообщение получил. Увидимся на следующей паре!"
+            }
         }
     }
 
@@ -460,6 +584,15 @@ class ScheduleRepository(
         val updated = _groupChatsFlow.value + newGroup
         _groupChatsFlow.value = updated
         saveGroupChats(updated)
+
+        // Sync to cloud
+        val myHandle = _userProfileFlow.value.handle
+        val memberHandles = _friendsFlow.value
+            .filter { memberFriendIds.contains(it.id) || memberFriendIds.contains(it.handle) }
+            .map { it.handle }
+        repoScope.launch {
+            firebaseService.publishGroupChat(newGroup, myHandle, memberHandles)
+        }
         return newGroup
     }
 
@@ -467,6 +600,66 @@ class ScheduleRepository(
         val updated = _groupChatsFlow.value.filterNot { it.id == groupId }
         _groupChatsFlow.value = updated
         saveGroupChats(updated)
+    }
+
+    // --- Subject Presets & Memory Suggestions ---
+
+    private fun loadSubjectPresets(): List<SubjectPreset> {
+        val raw = prefs.getString("saved_subject_presets", null) ?: return defaultSubjectPresets()
+        val list = raw.split(";;;").mapNotNull { item ->
+            val p = item.split("|||")
+            if (p.isNotEmpty() && p[0].isNotBlank()) {
+                SubjectPreset(
+                    title = p[0],
+                    professor = p.getOrElse(1) { "" },
+                    classroom = p.getOrElse(2) { "" },
+                    classType = runCatching { ClassType.valueOf(p.getOrElse(3) { "LECTURE" }) }.getOrDefault(ClassType.LECTURE),
+                    colorHex = p.getOrElse(4) { "#0061A4" }
+                )
+            } else null
+        }
+        return if (list.isEmpty()) defaultSubjectPresets() else list
+    }
+
+    private fun defaultSubjectPresets(): List<SubjectPreset> = listOf(
+        SubjectPreset("Высшая математика", "проф. Белов М.Ю.", "Ауд. 310", ClassType.LECTURE, "#6750A4"),
+        SubjectPreset("Информатика и программирование", "преп. Ильин Д.А.", "Комп. класс 5", ClassType.LAB, "#0061A4"),
+        SubjectPreset("Базы данных (SQL)", "преп. Васильев И.Д.", "Комп. класс 3", ClassType.LAB, "#006874"),
+        SubjectPreset("Алгоритмы и структуры данных", "проф. Соколов А.В.", "Ауд. 412", ClassType.LECTURE, "#0061A4"),
+        SubjectPreset("Физика", "доц. Петрова Е.И.", "Лаб. 12", ClassType.LAB, "#E65100"),
+        SubjectPreset("Иностранный язык", "ст. преп. Смирнова О.П.", "Ауд. 118", ClassType.PRACTICUM, "#B3261E"),
+        SubjectPreset("История России", "доц. Павлов Н.А.", "Ауд. 201", ClassType.SEMINAR, "#2E7D32")
+    )
+
+    private fun saveSubjectPreset(slot: ClassSlot) {
+        val current = _subjectPresetsFlow.value.toMutableList()
+        val existingIndex = current.indexOfFirst { it.title.equals(slot.subjectTitle, ignoreCase = true) }
+        val newPreset = SubjectPreset(
+            title = slot.subjectTitle.trim(),
+            professor = slot.professor.trim(),
+            classroom = slot.classroom.trim(),
+            classType = slot.classType,
+            colorHex = slot.colorHex ?: "#0061A4"
+        )
+        if (existingIndex >= 0) {
+            current[existingIndex] = newPreset
+        } else {
+            current.add(0, newPreset)
+        }
+        _subjectPresetsFlow.value = current
+        val serialized = current.joinToString(";;;") {
+            "${it.title}|||${it.professor}|||${it.classroom}|||${it.classType.name}|||${it.colorHex}"
+        }
+        prefs.edit().putString("saved_subject_presets", serialized).apply()
+    }
+
+    suspend fun isHandleTaken(handle: String): Boolean {
+        val clean = handle.trim().lowercase().removePrefix("@")
+        val myClean = _userProfileFlow.value.handle.trim().lowercase().removePrefix("@")
+        if (clean == myClean && _userProfileFlow.value.isRegistered) return false
+
+        val existingUser = firebaseService.searchUserByHandle(clean)
+        return existingUser != null && existingUser.id != myUserId
     }
 
     // --- Attendance Operations ---

@@ -69,6 +69,14 @@ data class ClassSlot(
         }
 }
 
+data class SubjectPreset(
+    val title: String,
+    val professor: String = "",
+    val classroom: String = "",
+    val classType: ClassType = ClassType.LECTURE,
+    val colorHex: String = "#0061A4"
+)
+
 data class GroupChat(
     val id: String = java.util.UUID.randomUUID().toString(),
     val name: String,

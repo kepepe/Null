@@ -69,151 +69,85 @@ fun DashboardScreen(
     ) {
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Bento Header with updated name "null"
-        Row(
+        // Bento Header
+        val greetingText = if (userProfile.name.isNotBlank()) {
+            val firstName = userProfile.name.trim().split(" ").firstOrNull() ?: userProfile.name
+            "Привет, $firstName"
+        } else {
+            "StudySync"
+        }
+
+        val (statusText, statusFg, statusBg) = when (currentStatus) {
+            is CurrentClassStatus.ActiveClass -> Triple(
+                "На паре (${currentStatus.currentSlot.formattedTimeSpan})",
+                BentoSuccessGreen,
+                BentoGreenContainer
+            )
+            is CurrentClassStatus.FreePeriod -> Triple(
+                "Перемена",
+                BentoCoral,
+                BentoCoralContainer
+            )
+            is CurrentClassStatus.DoneForToday -> Triple(
+                "Закончил учиться 🎉",
+                BentoPrimary,
+                BentoPrimaryContainer
+            )
+            is CurrentClassStatus.NoClassesToday -> Triple(
+                "Пар нет ☕",
+                BentoOnSurfaceVariant,
+                BentoSurfaceVariant
+            )
+        }
+
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "null",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 28.sp,
-                        color = BentoPrimary,
-                        letterSpacing = (-0.5).sp
-                    ),
-                    modifier = Modifier.testTag("app_header_title")
-                )
+            // Row 1: App Title / Greeting and User Avatar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = greetingText,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 26.sp,
+                            color = BentoPrimary,
+                            letterSpacing = (-0.5).sp
+                        ),
+                        modifier = Modifier.testTag("app_header_title"),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
 
-                Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                     Text(
                         text = dayFormatted,
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
                             color = BentoOnSurfaceVariant
                         )
                     )
-
-                    Text(
-                        text = "•",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = BentoOnSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                    )
-
-                    // Clickable Parity Mode Tag
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = BentoPrimaryContainer,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable(onClick = onToggleParityMode)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = parityText,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = BentoOnPrimaryContainer
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Default.ChangeCircle,
-                                contentDescription = "Сменить чётность",
-                                tint = BentoPrimary,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // User Profile Avatar & Live Status Badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val (statusText, statusFg, statusBg) = when (currentStatus) {
-                    is CurrentClassStatus.ActiveClass -> Triple(
-                        "На паре (${currentStatus.currentSlot.formattedTimeSpan})",
-                        BentoSuccessGreen,
-                        BentoGreenContainer
-                    )
-                    is CurrentClassStatus.FreePeriod -> Triple(
-                        "Перемена",
-                        BentoCoral,
-                        BentoCoralContainer
-                    )
-                    is CurrentClassStatus.DoneForToday -> Triple(
-                        "Закончил учиться 🎉",
-                        BentoPrimary,
-                        BentoPrimaryContainer
-                    )
-                    is CurrentClassStatus.NoClassesToday -> Triple(
-                        "Пар нет ☕",
-                        BentoOnSurfaceVariant,
-                        BentoSurfaceVariant
-                    )
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = statusBg,
-                    border = CardDefaults.outlinedCardBorder().copy(
-                        brush = androidx.compose.ui.graphics.SolidColor(statusFg.copy(alpha = 0.4f)),
-                        width = 1.dp
-                    ),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onOpenProfile)
-                        .testTag("profile_status_badge")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(statusFg)
-                        )
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = statusFg
-                            ),
-                            maxLines = 1
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.width(12.dp))
 
-                // User Profile Avatar Button (Enlarged)
+                // User Profile Avatar Button
                 Box(
                     modifier = Modifier
                         .size(46.dp)
                         .clip(CircleShape)
                         .background(if (userProfile.isRegistered) BentoPrimary else BentoSurfaceVariant)
                         .border(2.dp, BentoBorderLight, CircleShape)
-                        .shadow(elevation = 3.dp, shape = CircleShape)
+                        .shadow(elevation = 2.dp, shape = CircleShape)
                         .clickable(onClick = onOpenProfile)
                         .testTag("profile_avatar_button"),
                     contentAlignment = Alignment.Center
@@ -239,7 +173,82 @@ fun DashboardScreen(
                             imageVector = Icons.Default.Person,
                             contentDescription = "Профиль",
                             tint = BentoOnSurfaceVariant,
-                            modifier = Modifier.size(26.dp)
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+
+            // Row 2: Status & Parity Badges (separate row so neither is squished)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Clickable Parity Mode Tag
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = BentoPrimaryContainer,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onToggleParityMode)
+                        .testTag("toggle_parity_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = parityText,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = BentoOnPrimaryContainer
+                            ),
+                            maxLines = 1
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ChangeCircle,
+                            contentDescription = "Сменить чётность",
+                            tint = BentoPrimary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+
+                // Live Class Status Badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = statusBg,
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(statusFg.copy(alpha = 0.4f)),
+                        width = 1.dp
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onOpenProfile)
+                        .testTag("profile_status_badge")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(statusFg)
+                        )
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = statusFg
+                            ),
+                            maxLines = 1
                         )
                     }
                 }
