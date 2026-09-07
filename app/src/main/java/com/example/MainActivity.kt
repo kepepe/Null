@@ -151,6 +151,9 @@ class MainActivity : ComponentActivity() {
                                     editingSrsTask = null
                                     showAddEditSrsDialog = true
                                 },
+                                onImportTasks = { importedTasks ->
+                                    viewModel.importSrsTasks(importedTasks)
+                                },
                                 onNavigateToSchedule = {
                                     viewModel.selectTab(1)
                                 }

@@ -135,7 +135,7 @@ fun ShareScheduleDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "Короткий код для передачи:",
+                                    text = "Короткий код для передачи (до 25 символов):",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = FontWeight.SemiBold
@@ -143,10 +143,10 @@ fun ShareScheduleDialog(
                                 )
                                 Text(
                                     text = shareableCode,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    style = MaterialTheme.typography.titleMedium.copy(
                                         color = BentoPrimary,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 1.sp
                                     )
                                 )
                             }
@@ -205,7 +205,7 @@ fun ShareScheduleDialog(
                             errorMessage = null
                         },
                         label = { Text("Код или текст расписания") },
-                        placeholder = { Text("SYNC:... или вставьте сообщение") },
+                        placeholder = { Text("SYNC-XXXX-XXXX или полный текст расписания") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(110.dp),

@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.ClassSlot
 import com.example.model.SrsTask
+import com.example.ui.components.NotesToSrsDialog
+import com.example.ui.components.StudyAssistantDialog
 import com.example.ui.theme.*
 
 private enum class SrsFilter(val displayName: String) {
@@ -46,11 +48,14 @@ fun SrsScreen(
     onEditTask: (SrsTask) -> Unit,
     onDeleteTask: (String) -> Unit,
     onAddNewTask: () -> Unit,
+    onImportTasks: (List<SrsTask>) -> Unit = {},
     onNavigateToSchedule: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedFilter by remember { mutableStateOf(SrsFilter.ALL) }
     var selectedSubjectFilter by remember { mutableStateOf<String?>(null) }
+    var showStudyAssistantDialog by remember { mutableStateOf(false) }
+    var showNotesToSrsDialog by remember { mutableStateOf(false) }
 
     val userSubjects = remember(allClasses) {
         allClasses.map { it.subjectTitle.trim() }
@@ -84,7 +89,7 @@ fun SrsScreen(
                 contentColor = BentoOnPrimary,
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 0.dp)
                     .testTag("add_srs_task_fab")
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = null)
@@ -107,26 +112,132 @@ fun SrsScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Header
-                Column(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Самостоятельная работа",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 24.sp,
-                            color = BentoPrimary,
-                            letterSpacing = (-0.5).sp
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Самостоятельная работа",
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 24.sp,
+                                color = BentoPrimary,
+                                letterSpacing = (-0.5).sp
+                            )
                         )
-                    )
-                    Text(
-                        text = "Домашние задания, лабораторные и дедлайны",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = BentoOnSurfaceVariant,
-                            fontWeight = FontWeight.Medium
+                        Text(
+                            text = "Домашние задания, лабораторные и дедлайны",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = BentoOnSurfaceVariant,
+                                fontWeight = FontWeight.Medium
+                            )
                         )
-                    )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(
+                            onClick = { showNotesToSrsDialog = true },
+                            modifier = Modifier.testTag("btn_notes_to_srs")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoFixHigh,
+                                contentDescription = "Парсинг заметок в задания",
+                                tint = BentoPrimary
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { showStudyAssistantDialog = true },
+                            modifier = Modifier.testTag("btn_study_assistant")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Psychology,
+                                contentDescription = "AI-тьютор Gemini",
+                                tint = BentoPrimary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // AI Bento Banner Card
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = BentoPrimaryContainer.copy(alpha = 0.5f),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(BentoPrimary.copy(alpha = 0.2f)),
+                        width = 1.dp
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(BentoPrimary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = BentoOnPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Gemini AI: умный тьютор & парсер",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = BentoPrimary,
+                                        fontSize = 13.sp
+                                    )
+                                )
+                                Text(
+                                    text = "Превращайте конспекты в задачи или задавайте вопросы",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = BentoOnSurfaceVariant,
+                                        fontSize = 11.sp
+                                    )
+                                )
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilledTonalButton(
+                                onClick = { showNotesToSrsDialog = true },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text("Парсер", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                            FilledTonalButton(
+                                onClick = { showStudyAssistantDialog = true },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text("Тьютор", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -316,14 +427,25 @@ fun SrsScreen(
                                     Text("Перейти к расписанию")
                                 }
                             } else if (tasks.isEmpty()) {
-                                Button(
-                                    onClick = onAddNewTask,
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Добавить задание")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = onAddNewTask,
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Добавить")
+                                    }
+
+                                    FilledTonalButton(
+                                        onClick = { showNotesToSrsDialog = true },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Из заметок (ИИ)")
+                                    }
                                 }
                             }
                         }
@@ -343,6 +465,26 @@ fun SrsScreen(
             item {
                 Spacer(modifier = Modifier.height(110.dp))
             }
+        }
+
+        // AI Dialogs
+        if (showNotesToSrsDialog) {
+            NotesToSrsDialog(
+                knownSubjects = userSubjects,
+                onDismiss = { showNotesToSrsDialog = false },
+                onImportSuccess = { importedTasks ->
+                    onImportTasks(importedTasks)
+                }
+            )
+        }
+
+        if (showStudyAssistantDialog) {
+            StudyAssistantDialog(
+                tasks = tasks,
+                allClasses = allClasses,
+                initialSubject = selectedSubjectFilter,
+                onDismiss = { showStudyAssistantDialog = false }
+            )
         }
     }
 }

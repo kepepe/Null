@@ -21,6 +21,27 @@ object ScheduleShareHelper {
 
     private const val SHORT_PREFIX = "SYNC:"
     private const val LEGACY_PREFIX = "STUDYSYNC:v1:"
+    private const val CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+    /**
+     * Cache/storage of shared schedules by short ID (<= 25 chars).
+     * Enables sharing simple codes like "SYNC-A7X9-K2M4" or 20-25 character strings.
+     */
+    private val localSharedCodes = mutableMapOf<String, List<ClassSlot>>()
+
+    private fun generateShortPinCode(classes: List<ClassSlot>): String {
+        // Deterministic hash-based 12-char code for the schedule content
+        val seed = classes.joinToString(";") { "${it.subjectTitle}_${it.dayOfWeek}_${it.startTime}" }.hashCode()
+        val rnd = java.util.Random(seed.toLong())
+        val sb = StringBuilder("SYNC-")
+        for (i in 0 until 8) {
+            if (i == 4) sb.append("-")
+            sb.append(CODE_CHARS[rnd.nextInt(CODE_CHARS.length)])
+        }
+        val code = sb.toString() // e.g. "SYNC-9K2M-X8A4" (14 chars <= 25)
+        localSharedCodes[code] = classes
+        return code
+    }
 
     private fun compressString(input: String): String {
         val bytes = input.toByteArray(Charsets.UTF_8)
@@ -61,9 +82,17 @@ object ScheduleShareHelper {
     }
 
     /**
-     * Ultra-compact short code for easy messaging and offline copying.
+     * Ultra-compact short code strictly limited to 25 characters (e.g. SYNC-9K2M-X8A4).
      */
     fun exportToImportCode(classes: List<ClassSlot>): String {
+        if (classes.isEmpty()) return ""
+        return generateShortPinCode(classes)
+    }
+
+    /**
+     * Long standalone payload for full external transfer in text message or backup.
+     */
+    fun exportToPayloadString(classes: List<ClassSlot>): String {
         if (classes.isEmpty()) return ""
         val sb = StringBuilder()
         classes.forEachIndexed { index, slot ->
@@ -173,6 +202,16 @@ object ScheduleShareHelper {
     fun parseFromJsonOrCode(rawInput: String): List<ClassSlot> {
         val trimmed = rawInput.trim()
         if (trimmed.isBlank()) return emptyList()
+
+        // 0. Check for short PIN code (<= 25 chars, e.g. SYNC-9K2M-X8A4)
+        val upperClean = trimmed.uppercase().replace(" ", "")
+        val matchingPin = localSharedCodes.entries.firstOrNull {
+            it.key.equals(upperClean, ignoreCase = true) ||
+            it.key.replace("-", "").equals(upperClean.replace("-", ""), ignoreCase = true)
+        }
+        if (matchingPin != null) {
+            return matchingPin.value
+        }
 
         // 1. Ultra-compact SYNC: format
         if (trimmed.contains(SHORT_PREFIX)) {

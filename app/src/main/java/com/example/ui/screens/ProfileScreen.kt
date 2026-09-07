@@ -179,27 +179,6 @@ fun ProfileScreen(
                             modifier = Modifier.size(40.dp)
                         )
                     }
-
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(26.dp),
-                        shape = CircleShape,
-                        color = BentoPrimary,
-                        border = CardDefaults.outlinedCardBorder().copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(Color.White),
-                            width = 2.dp
-                        )
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Сменить фото",
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))

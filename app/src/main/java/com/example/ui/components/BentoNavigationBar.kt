@@ -103,20 +103,20 @@ fun BentoNavigationBar(
                             imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
                             contentDescription = item.title,
                             tint = contentColor,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(1.dp))
                         Text(
                             text = item.title,
                             maxLines = 1,
                             softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
+                            overflow = TextOverflow.Visible,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.5.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 9.5.sp,
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                 color = contentColor,
-                                lineHeight = 12.sp,
-                                letterSpacing = (-0.2).sp
+                                lineHeight = 11.sp,
+                                letterSpacing = (-0.4).sp
                             )
                         )
                     }

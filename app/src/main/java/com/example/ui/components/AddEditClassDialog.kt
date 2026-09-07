@@ -12,8 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.model.*
 import com.example.ui.theme.BentoPrimary
+import com.example.ui.theme.BentoPrimaryContainer
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -61,16 +64,93 @@ fun AddEditClassDialog(
         mutableStateOf(initialSlot?.colorHex ?: subjectColorPalette.first().first)
     }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var smartInputText by remember { mutableStateOf("") }
+    var showSmartInput by remember { mutableStateOf(false) }
+
+    fun parseSmartLine(input: String) {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return
+
+        // Extract pair number e.g. "1 пара", "2 пара"
+        val pairMatch = Regex("(\\d+)\\s*(?:пара|пары|парой)").find(trimmed)
+        if (pairMatch != null) {
+            val pNum = pairMatch.groupValues[1].toIntOrNull()
+            val bell = bellSlots.find { it.pairNumber == pNum }
+            if (bell != null) {
+                val fmt = DateTimeFormatter.ofPattern("HH:mm")
+                startTimeText = bell.startTime.format(fmt)
+                endTimeText = bell.endTime.format(fmt)
+            }
+        }
+
+        // Extract time range e.g. "10:00-11:30" or "8:30 - 10:00"
+        val timeMatch = Regex("(\\d{1,2}:\\d{2})\\s*[-—–]\\s*(\\d{1,2}:\\d{2})").find(trimmed)
+        if (timeMatch != null) {
+            startTimeText = timeMatch.groupValues[1].padStart(5, '0')
+            endTimeText = timeMatch.groupValues[2].padStart(5, '0')
+        }
+
+        // Extract ClassType
+        val lower = trimmed.lowercase()
+        when {
+            lower.contains("лекц") || lower.contains("лек") -> classType = ClassType.LECTURE
+            lower.contains("лаб") -> classType = ClassType.LAB
+            lower.contains("практ") -> classType = ClassType.PRACTICUM
+            lower.contains("сем") -> classType = ClassType.SEMINAR
+        }
+
+        // Extract day of week
+        when {
+            lower.contains("пн") || lower.contains("понедельник") -> dayOfWeek = DayOfWeek.MONDAY
+            lower.contains("вт") || lower.contains("вторник") -> dayOfWeek = DayOfWeek.TUESDAY
+            lower.contains("ср") || lower.contains("среда") -> dayOfWeek = DayOfWeek.WEDNESDAY
+            lower.contains("чт") || lower.contains("четверг") -> dayOfWeek = DayOfWeek.THURSDAY
+            lower.contains("пт") || lower.contains("пятница") -> dayOfWeek = DayOfWeek.FRIDAY
+            lower.contains("сб") || lower.contains("суббота") -> dayOfWeek = DayOfWeek.SATURDAY
+        }
+
+        // Extract Classroom (e.g. "ауд. 402", "каб. 312", "ауд 301")
+        val roomMatch = Regex("(?:ауд\\.?|каб\\.?|кабинет|аудитория)\\s*([A-Za-zА-Яа-я0-9\\-]+)", RegexOption.IGNORE_CASE).find(trimmed)
+        if (roomMatch != null) {
+            classroom = "Ауд. " + roomMatch.groupValues[1]
+        }
+
+        // Extract Professor (words with initials e.g. "Иванов И.И." or "проф. Смирнов")
+        val profMatch = Regex("(?:проф\\.?|доц\\.?|преп\\.?)?\\s*([А-ЯЁ][а-яё]+(?:\\s+[А-ЯЁ]\\.[А-ЯЁ]\\.|\\s+[А-ЯЁ][а-яё]+))").find(trimmed)
+        if (profMatch != null) {
+            professor = profMatch.value.trim()
+        }
+
+        // Clean up title by removing recognized patterns
+        var titleCandidate = trimmed
+            .replace(Regex("(?:ауд\\.?|каб\\.?|кабинет|аудитория)\\s*([A-Za-zА-Яа-я0-9\\-]+)", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("(\\d{1,2}:\\d{2})\\s*[-—–]\\s*(\\d{1,2}:\\d{2})"), "")
+            .replace(Regex("(\\d+)\\s*(?:пара|пары|парой)"), "")
+            .replace(Regex("(?:лекция|лек|практика|пр|лабораторная|лаб|семинар)", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("(?:понедельник|вторник|среда|четверг|пятница|суббота|пн|вт|ср|чт|пт|сб)", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .trim(',', '.', '-', '—')
+
+        if (profMatch != null) {
+            titleCandidate = titleCandidate.replace(profMatch.value, "").trim()
+        }
+
+        if (titleCandidate.isNotBlank()) {
+            subjectTitle = titleCandidate.trim().capitalize(java.util.Locale.ROOT)
+        }
+    }
 
     val hasEnteredSubjectData = subjectTitle.isNotBlank() && (professor.isNotBlank() || classroom.isNotBlank())
     val activeSuggestions = remember(subjectTitle, professor, classroom, subjectPresets) {
-        if (!hasEnteredSubjectData) {
+        if (subjectPresets.isEmpty()) {
             emptyList()
+        } else if (subjectTitle.isBlank()) {
+            subjectPresets.take(5)
         } else {
             val trimmed = subjectTitle.trim()
             subjectPresets.filter {
                 it.title.contains(trimmed, ignoreCase = true)
-            }.take(4)
+            }.take(5)
         }
     }
 
@@ -120,6 +200,145 @@ fun AddEditClassDialog(
                     }
                 }
 
+                // Smart Express Text Bar
+                if (initialSlot == null) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = BentoPrimaryContainer.copy(alpha = 0.5f),
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(BentoPrimary.copy(alpha = 0.3f)),
+                            width = 1.dp
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = BentoPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "Умный ввод одной строкой",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = BentoPrimary
+                                        )
+                                    )
+                                }
+                                TextButton(
+                                    onClick = { showSmartInput = !showSmartInput },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (showSmartInput) "Скрыть" else "Открыть",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            if (showSmartInput) {
+                                OutlinedTextField(
+                                    value = smartInputText,
+                                    onValueChange = { smartInputText = it },
+                                    placeholder = {
+                                        Text(
+                                            "напр. Матанализ лекция ауд. 402 Соколов 1 пара",
+                                            fontSize = 12.sp
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                FilledTonalButton(
+                                    onClick = {
+                                        if (smartInputText.isNotBlank()) {
+                                            parseSmartLine(smartInputText)
+                                            smartInputText = ""
+                                            showSmartInput = false
+                                        }
+                                    },
+                                    modifier = Modifier.align(Alignment.End),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FlashOn,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Заполнить форму")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Autocomplete Subject Presets / Fast Fill Chips
+                if (activeSuggestions.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "⚡ Быстрое заполнение из предметов:",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPrimary
+                            )
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(activeSuggestions) { preset ->
+                                SuggestionChip(
+                                    onClick = {
+                                        subjectTitle = preset.title
+                                        if (preset.professor.isNotBlank()) professor = preset.professor
+                                        if (preset.classroom.isNotBlank()) classroom = preset.classroom
+                                        classType = preset.classType
+                                        selectedColorHex = preset.colorHex
+                                        errorMessage = null
+                                    },
+                                    label = {
+                                        Text(
+                                            text = preset.title,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    },
+                                    icon = {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    runCatching { Color(android.graphics.Color.parseColor(preset.colorHex)) }
+                                                        .getOrDefault(BentoPrimary)
+                                                )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Subject Title
                 OutlinedTextField(
                     value = subjectTitle,
@@ -161,55 +380,6 @@ fun AddEditClassDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp)
                 )
-
-                // Autocomplete Subject Presets (shown only after user enters subject details)
-                if (activeSuggestions.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "💡 Подсказка из сохранённых предметов:",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = BentoPrimary
-                            )
-                        )
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(activeSuggestions) { preset ->
-                                SuggestionChip(
-                                    onClick = {
-                                        subjectTitle = preset.title
-                                        if (preset.professor.isNotBlank()) professor = preset.professor
-                                        if (preset.classroom.isNotBlank()) classroom = preset.classroom
-                                        classType = preset.classType
-                                        selectedColorHex = preset.colorHex
-                                        errorMessage = null
-                                    },
-                                    label = {
-                                        Text(
-                                            text = preset.title,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    },
-                                    icon = {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(8.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    runCatching { Color(android.graphics.Color.parseColor(preset.colorHex)) }
-                                                        .getOrDefault(BentoPrimary)
-                                                )
-                                        )
-                                    },
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                            }
-                        }
-                    }
-                }
 
                 // Class Type Chips (горизонтальная прокрутка)
                 Text(

@@ -101,9 +101,9 @@ fun DashboardScreen(
                 BentoPrimaryContainer
             )
             is CurrentClassStatus.NoClassesToday -> Triple(
-                "Пар нет ☕",
-                BentoOnSurfaceVariant,
-                BentoSurfaceVariant
+                "Пар нет (Выходной) 🌴",
+                BentoPrimary,
+                BentoPrimaryContainer
             )
         }
 

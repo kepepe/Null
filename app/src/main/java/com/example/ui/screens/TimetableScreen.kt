@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.*
 import com.example.ui.components.BellsScheduleBottomSheet
+import com.example.ui.components.ScanScheduleDialog
 import com.example.ui.components.ScheduleWindowItemCard
 import com.example.ui.components.ShareScheduleDialog
 import com.example.ui.theme.*
@@ -67,6 +68,7 @@ fun TimetableScreen(
     val russianLocale = Locale("ru", "RU")
     var showBellsSheet by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+    var showScanScheduleDialog by remember { mutableStateOf(false) }
 
     val dayFilteredClasses = remember(allClasses, selectedDay, selectedParity) {
         allClasses
@@ -165,6 +167,18 @@ fun TimetableScreen(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // AI Photo/Text Schedule Scanner Trigger
+                    IconButton(
+                        onClick = { showScanScheduleDialog = true },
+                        modifier = Modifier.testTag("btn_ai_scan_schedule")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Распознать расписание по фото (ИИ)",
+                            tint = BentoPrimary
+                        )
+                    }
+
                     // Bells Schedule Modal Trigger
                     IconButton(
                         onClick = { showBellsSheet = true },
@@ -353,13 +367,25 @@ fun TimetableScreen(
                             style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        FilledTonalButton(
-                            onClick = onAddNewClass,
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Добавить пару")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = onAddNewClass,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Добавить пару")
+                            }
+
+                            Button(
+                                onClick = { showScanScheduleDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary)
+                            ) {
+                                Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Скан по фото")
+                            }
                         }
                     }
                 }
@@ -417,6 +443,16 @@ fun TimetableScreen(
             allClasses = allClasses,
             onDismiss = { showShareDialog = false },
             onImportClasses = { imported ->
+                onImportClasses(imported)
+            }
+        )
+    }
+
+    // AI Schedule Scanner Dialog (Photo OCR & Notes)
+    if (showScanScheduleDialog) {
+        ScanScheduleDialog(
+            onDismiss = { showScanScheduleDialog = false },
+            onImportSuccess = { imported ->
                 onImportClasses(imported)
             }
         )

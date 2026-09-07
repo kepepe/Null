@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.temporal.IsoFields
 
 class MainViewModel(
     private val repository: ScheduleRepository,
@@ -92,13 +93,23 @@ class MainViewModel(
             initialValue = emptyList()
         )
 
+    private fun computeInitialTimetableDay(): DayOfWeek {
+        val today = LocalDate.now().dayOfWeek
+        return if (today == DayOfWeek.SUNDAY) DayOfWeek.MONDAY else today
+    }
+
+    private fun computeCalendarWeekParity(): WeekParity {
+        val weekNumber = LocalDate.now().get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
+        return if (weekNumber % 2 == 0) WeekParity.EVEN else WeekParity.ODD
+    }
+
     private val _currentTab = MutableStateFlow(0)
     val currentTab: StateFlow<Int> = _currentTab.asStateFlow()
 
-    private val _selectedTimetableDay = MutableStateFlow(DayOfWeek.MONDAY)
+    private val _selectedTimetableDay = MutableStateFlow(computeInitialTimetableDay())
     val selectedTimetableDay: StateFlow<DayOfWeek> = _selectedTimetableDay.asStateFlow()
 
-    private val _selectedParityFilter = MutableStateFlow(WeekParity.ALL)
+    private val _selectedParityFilter = MutableStateFlow(computeCalendarWeekParity())
     val selectedParityFilter: StateFlow<WeekParity> = _selectedParityFilter.asStateFlow()
 
     private val _selectedChatChannel = MutableStateFlow("")
@@ -182,7 +193,8 @@ class MainViewModel(
     fun selectTab(index: Int) {
         _currentTab.value = index
         if (index == 1) {
-            _selectedTimetableDay.value = DayOfWeek.MONDAY
+            _selectedTimetableDay.value = computeInitialTimetableDay()
+            _selectedParityFilter.value = computeCalendarWeekParity()
         }
     }
 
@@ -282,6 +294,15 @@ class MainViewModel(
                 repository.addOrUpdateClass(slot)
             }
             _toastMessage.value = "Импортировано пар: ${classes.size}"
+        }
+    }
+
+    fun importSrsTasks(tasks: List<SrsTask>) {
+        viewModelScope.launch {
+            tasks.forEach { task ->
+                repository.addOrUpdateSrsTask(task)
+            }
+            _toastMessage.value = "Добавлено заданий СРС: ${tasks.size}"
         }
     }
 
