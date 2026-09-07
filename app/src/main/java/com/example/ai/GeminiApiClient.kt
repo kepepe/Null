@@ -7,7 +7,7 @@ import android.net.Uri
 import android.util.Base64
 import com.example.BuildConfig
 import com.example.model.ClassSlot
-import com.example.model.ClassType
+
 import com.example.model.SrsTask
 import com.example.model.WeekParity
 import kotlinx.coroutines.Dispatchers

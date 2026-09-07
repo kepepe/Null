@@ -3,7 +3,6 @@ package com.example.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.model.ClassSlot
-import com.example.model.ClassType
 import com.example.model.WeekParity
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -29,7 +28,7 @@ data class ClassEntity(
         return ClassSlot(
             id = id,
             subjectTitle = subjectTitle,
-            classType = runCatching { ClassType.valueOf(classType) }.getOrDefault(ClassType.LECTURE),
+            classType = classType,
             professor = professor,
             classroom = classroom,
             dayOfWeek = DayOfWeek.of(dayOfWeek.coerceIn(1, 7)),
@@ -48,7 +47,7 @@ data class ClassEntity(
             return ClassEntity(
                 id = slot.id,
                 subjectTitle = slot.subjectTitle,
-                classType = slot.classType.name,
+                classType = slot.classType,
                 professor = slot.professor,
                 classroom = slot.classroom,
                 dayOfWeek = slot.dayOfWeek.value,

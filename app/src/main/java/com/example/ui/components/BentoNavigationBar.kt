@@ -54,6 +54,7 @@ fun BentoNavigationBar(
         NavItem("Главная", Icons.Filled.Home, Icons.Outlined.Home, "nav_home"),
         NavItem("Пары", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth, "nav_schedule"),
         NavItem("СРС", Icons.Filled.Assignment, Icons.Outlined.Assignment, "nav_srs"),
+        NavItem("Бот", Icons.Filled.Forum, Icons.Outlined.Forum, "nav_bot"),
         NavItem("Профиль", Icons.Filled.Person, Icons.Outlined.Person, "nav_profile")
     )
 

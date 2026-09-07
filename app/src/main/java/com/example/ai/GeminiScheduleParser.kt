@@ -114,10 +114,10 @@ object GeminiScheduleParser {
 
             val typeStr = obj.optString("classType", "LECTURE").uppercase()
             val classType = when {
-                typeStr.contains("LAB") -> ClassType.LAB
-                typeStr.contains("PRACT") -> ClassType.PRACTICUM
-                typeStr.contains("SEM") -> ClassType.SEMINAR
-                else -> ClassType.LECTURE
+                typeStr.contains("LAB") -> "Лабораторная"
+                typeStr.contains("PRACT") -> "Практика"
+                typeStr.contains("SEM") -> "Семинар"
+                else -> "Лекция"
             }
 
             val professor = obj.optString("professor", "").trim()

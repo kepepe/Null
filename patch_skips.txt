@@ -1,0 +1,21 @@
+    suspend fun incrementSkip(classId: String) {
+        val entity = classDao.getClassById(classId) ?: return
+        val allEntities = classDao.getAllClassesSync()
+        val subjectTitle = entity.subjectTitle
+        val matchingEntities = allEntities.filter { it.subjectTitle.equals(subjectTitle, ignoreCase = true) }
+        val newCount = (entity.skippedCount + 1).coerceAtMost(entity.allowedSkips)
+        matchingEntities.forEach { 
+            classDao.insertOrUpdate(it.copy(skippedCount = newCount))
+        }
+    }
+
+    suspend fun decrementSkip(classId: String) {
+        val entity = classDao.getClassById(classId) ?: return
+        val allEntities = classDao.getAllClassesSync()
+        val subjectTitle = entity.subjectTitle
+        val matchingEntities = allEntities.filter { it.subjectTitle.equals(subjectTitle, ignoreCase = true) }
+        val newCount = (entity.skippedCount - 1).coerceAtLeast(0)
+        matchingEntities.forEach { 
+            classDao.insertOrUpdate(it.copy(skippedCount = newCount))
+        }
+    }

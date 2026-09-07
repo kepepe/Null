@@ -2,7 +2,7 @@ package com.example.util
 
 import android.util.Base64
 import com.example.model.ClassSlot
-import com.example.model.ClassType
+
 import com.example.model.WeekParity
 import org.json.JSONArray
 import org.json.JSONObject
@@ -66,7 +66,7 @@ object ScheduleShareHelper {
         classes.forEach { slot ->
             val obj = JSONObject().apply {
                 put("title", slot.subjectTitle)
-                put("type", slot.classType.name)
+                put("type", slot.classType)
                 put("prof", slot.professor)
                 put("room", slot.classroom)
                 put("day", slot.dayOfWeek.name)
@@ -100,7 +100,7 @@ object ScheduleShareHelper {
             val startMin = slot.startTime.hour * 60 + slot.startTime.minute
             val endMin = slot.endTime.hour * 60 + slot.endTime.minute
             sb.append(slot.subjectTitle.replace("|", "/")).append("|")
-                .append(slot.classType.ordinal).append("|")
+                .append(slot.classType.replace("|", "/")).append("|")
                 .append(slot.professor.replace("|", "/")).append("|")
                 .append(slot.classroom.replace("|", "/")).append("|")
                 .append(slot.dayOfWeek.value).append("|")
@@ -139,7 +139,7 @@ object ScheduleShareHelper {
                     .replaceFirstChar { if (it.isLowerCase()) it.titlecase(russianLocale) else it.toString() }
                 sb.append("📌 $dayName:\n")
                 dayClasses.forEachIndexed { idx, slot ->
-                    sb.append("  ${idx + 1}. [${slot.formattedTimeSpan}] ${slot.subjectTitle} (${slot.classType.displayName})\n")
+                    sb.append("  ${idx + 1}. [${slot.formattedTimeSpan}] ${slot.subjectTitle} (${slot.classType})\n")
                     if (slot.classroom.isNotBlank()) sb.append("     📍 ${slot.classroom}")
                     if (slot.professor.isNotBlank()) sb.append(" • 👤 ${slot.professor}")
                     sb.append("\n")
@@ -165,7 +165,7 @@ object ScheduleShareHelper {
             if (parts.isEmpty()) continue
             val title = parts[0].ifBlank { "Предмет" }
             val typeIdx = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            val classType = ClassType.values().getOrElse(typeIdx) { ClassType.LECTURE }
+            val classType = parts.getOrElse(1) { "Лекция" }
             val professor = parts.getOrElse(2) { "" }
             val classroom = parts.getOrElse(3) { "" }
             val dayVal = parts.getOrNull(4)?.toIntOrNull()?.coerceIn(1, 7) ?: 1
@@ -258,8 +258,8 @@ object ScheduleShareHelper {
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
                 val title = obj.optString("title", "Предмет")
-                val typeStr = obj.optString("type", ClassType.LECTURE.name)
-                val type = runCatching { ClassType.valueOf(typeStr) }.getOrDefault(ClassType.LECTURE)
+                val type = obj.optString("type", "Лекция")
+                
                 val prof = obj.optString("prof", "")
                 val room = obj.optString("room", "")
                 val dayStr = obj.optString("day", DayOfWeek.MONDAY.name)

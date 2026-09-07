@@ -30,7 +30,7 @@ import com.example.model.SrsTask
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
-private data class AssistantMessage(
+data class AssistantMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
     val text: String,
     val isUser: Boolean,
@@ -338,7 +338,7 @@ fun StudyAssistantDialog(
 }
 
 @Composable
-private fun AssistantChatBubble(message: AssistantMessage) {
+fun AssistantChatBubble(message: AssistantMessage) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start

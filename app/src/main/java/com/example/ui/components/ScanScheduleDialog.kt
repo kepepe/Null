@@ -33,7 +33,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.ai.GeminiApiClient
 import com.example.ai.GeminiScheduleParser
 import com.example.model.ClassSlot
-import com.example.model.ClassType
+
 import com.example.model.WeekParity
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -523,7 +523,7 @@ private fun RecognizedClassItem(slot: ClassSlot) {
                         color = BentoSurface
                     ) {
                         Text(
-                            text = slot.classType.displayName,
+                            text = slot.classType,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = BentoOnSurfaceVariant,
                                 fontSize = 10.sp

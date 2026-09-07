@@ -38,7 +38,6 @@ import coil.compose.AsyncImage
 import com.example.domain.ObserveCurrentClassUseCase
 import com.example.model.*
 import com.example.ui.theme.*
-import com.example.util.SilentModeHelper
 import java.io.File
 import java.time.LocalDate
 
@@ -54,7 +53,6 @@ fun ProfileScreen(
     onSelectThemeMode: (AppThemeMode) -> Unit,
     onToggleNotifications: (Boolean) -> Unit,
     onTestNotification: () -> Unit,
-    onToggleAutoSilentMode: (Boolean) -> Unit,
     onOpenEditBellsDialog: () -> Unit = {},
     onLoadDemoSchedule: () -> Unit,
     onClearSchedule: () -> Unit,
@@ -89,10 +87,6 @@ fun ProfileScreen(
         } else {
             Toast.makeText(context, "Разрешение на уведомления не предоставлено", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    val hasDndAccess = remember(userProfile.autoSilentMode) {
-        SilentModeHelper.isDndAccessGranted(context)
     }
 
     Column(
@@ -234,108 +228,6 @@ fun ProfileScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(if (userProfile.isRegistered) "Изменить профиль" else "Заполнить профиль")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // ==========================================
-        // 2. АВТО-БЕЗЗВУЧНЫЙ РЕЖИМ НА ПАРАХ
-        // ==========================================
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = BentoSurface),
-            border = CardDefaults.outlinedCardBorder().copy(
-                brush = androidx.compose.ui.graphics.SolidColor(BentoBorderLight),
-                width = 1.dp
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(BentoCoral.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.VolumeOff,
-                                contentDescription = null,
-                                tint = BentoCoral,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        Column {
-                            Text(
-                                text = "Авто-беззвучный режим",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Text(
-                                text = "Выключать звук и виброзвонок во время пар",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = BentoOnSurfaceVariant,
-                                    fontSize = 11.sp
-                                )
-                            )
-                        }
-                    }
-
-                    Switch(
-                        checked = userProfile.autoSilentMode,
-                        onCheckedChange = { isChecked ->
-                            onToggleAutoSilentMode(isChecked)
-                            if (isChecked && !hasDndAccess) {
-                                SilentModeHelper.openDndSettings(context)
-                            }
-                        }
-                    )
-                }
-
-                if (userProfile.autoSilentMode && !hasDndAccess) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = BentoCoralContainer.copy(alpha = 0.5f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Требуется доступ «Не беспокоить» в системе",
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.sp,
-                                    color = BentoOnCoralContainer
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            FilledTonalButton(
-                                onClick = { SilentModeHelper.openDndSettings(context) },
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text("Включить", fontSize = 11.sp)
-                            }
-                        }
-                    }
                 }
             }
         }

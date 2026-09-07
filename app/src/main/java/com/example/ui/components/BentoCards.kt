@@ -740,7 +740,7 @@ fun BentoWindowsCard(
                 }
 
                 Text(
-                    text = "ТРЕКЕР ОКОН",
+                    text = "ТРЕКЕР ПЕРЕРЫВОВ",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.5.sp,
@@ -754,7 +754,7 @@ fun BentoWindowsCard(
 
             if (nextWindow != null) {
                 Text(
-                    text = "Окно ${nextWindow.formattedDuration}",
+                    text = "Перерыв ${nextWindow.formattedDuration}",
                     style = MaterialTheme.typography.titleSmall.copy(
                         fontWeight = FontWeight.Bold,
                         color = BentoOnSurface
@@ -790,7 +790,7 @@ fun BentoWindowsCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Без окон",
+                        text = "Без перерывов",
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontWeight = FontWeight.SemiBold,
                             color = BentoOnSurface
@@ -940,7 +940,7 @@ fun ScheduleWindowItemCard(
                 }
                 Column {
                     Text(
-                        text = "Окно ${window.formattedDuration}",
+                        text = "Перерыв ${window.formattedDuration}",
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontWeight = FontWeight.Bold,
                             color = BentoOnCoralContainer

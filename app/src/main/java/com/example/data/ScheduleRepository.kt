@@ -3,7 +3,6 @@ package com.example.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.model.*
-import com.example.util.SilentModeHelper
 import com.example.widget.ScheduleWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +67,27 @@ class ScheduleRepository(
         ScheduleWidgetProvider.updateAllWidgets(context)
     }
 
+    suspend fun incrementSkip(classId: String) {
+        val entity = classDao.getClassById(classId) ?: return
+        val allEntities = classDao.getAllClassesSync()
+        val subjectTitle = entity.subjectTitle
+        val matchingEntities = allEntities.filter { it.subjectTitle.equals(subjectTitle, ignoreCase = true) }
+        val newCount = (entity.skippedCount + 1).coerceAtMost(entity.allowedSkips)
+        matchingEntities.forEach { 
+            classDao.insertOrUpdate(it.copy(skippedCount = newCount))
+        }
+    }
+
+    suspend fun decrementSkip(classId: String) {
+        val entity = classDao.getClassById(classId) ?: return
+        val allEntities = classDao.getAllClassesSync()
+        val subjectTitle = entity.subjectTitle
+        val matchingEntities = allEntities.filter { it.subjectTitle.equals(subjectTitle, ignoreCase = true) }
+        val newCount = (entity.skippedCount - 1).coerceAtLeast(0)
+        matchingEntities.forEach { 
+            classDao.insertOrUpdate(it.copy(skippedCount = newCount))
+        }
+    }
     suspend fun deleteClass(id: String) {
         classDao.deleteById(id)
         ScheduleWidgetProvider.updateAllWidgets(context)
@@ -78,17 +98,7 @@ class ScheduleRepository(
         ScheduleWidgetProvider.updateAllWidgets(context)
     }
 
-    suspend fun incrementSkip(classId: String) {
-        val entity = classDao.getClassById(classId) ?: return
-        val updated = entity.copy(skippedCount = entity.skippedCount + 1)
-        classDao.insertOrUpdate(updated)
-    }
 
-    suspend fun decrementSkip(classId: String) {
-        val entity = classDao.getClassById(classId) ?: return
-        val updated = entity.copy(skippedCount = (entity.skippedCount - 1).coerceAtLeast(0))
-        classDao.insertOrUpdate(updated)
-    }
 
     suspend fun updateAllowedSkips(classId: String, allowed: Int) {
         val entity = classDao.getClassById(classId) ?: return
@@ -107,7 +117,6 @@ class ScheduleRepository(
         val notifEnabled = prefs.getBoolean("user_notifications_enabled", true)
         val themeModeStr = prefs.getString("user_theme_mode", AppThemeMode.SYSTEM.name)
         val themeMode = runCatching { AppThemeMode.valueOf(themeModeStr!!) }.getOrDefault(AppThemeMode.SYSTEM)
-        val autoSilent = prefs.getBoolean("user_auto_silent_mode", false)
         val bellPresetStr = prefs.getString("user_bell_preset", BellSchedulePreset.STANDARD.name)
         val bellPreset = runCatching { BellSchedulePreset.valueOf(bellPresetStr!!) }.getOrDefault(BellSchedulePreset.STANDARD)
         val bellSlots = loadBellSlots()
@@ -121,7 +130,6 @@ class ScheduleRepository(
             parityMode = parityMode,
             notificationsEnabled = notifEnabled,
             themeMode = themeMode,
-            autoSilentMode = autoSilent,
             bellPreset = bellPreset,
             bellSlots = bellSlots
         )
@@ -193,19 +201,6 @@ class ScheduleRepository(
         return uri
     }
 
-    fun setAutoSilentMode(enabled: Boolean) {
-        prefs.edit().putBoolean("user_auto_silent_mode", enabled).apply()
-        _userProfileFlow.value = _userProfileFlow.value.copy(autoSilentMode = enabled)
-        if (!enabled) {
-            SilentModeHelper.applyClassSilentMode(context, false)
-        }
-    }
-
-    fun applyAutoSilentMode(status: CurrentClassStatus) {
-        if (!_userProfileFlow.value.autoSilentMode) return
-        val shouldBeSilent = status is CurrentClassStatus.ActiveClass
-        SilentModeHelper.applyClassSilentMode(context, shouldBeSilent)
-    }
 
     fun setWeekParityMode(mode: WeekParityMode) {
         prefs.edit().putString("user_parity_mode", mode.name).apply()
@@ -259,7 +254,7 @@ class ScheduleRepository(
                     title = p[0],
                     professor = p.getOrElse(1) { "" },
                     classroom = p.getOrElse(2) { "" },
-                    classType = runCatching { ClassType.valueOf(p.getOrElse(3) { "LECTURE" }) }.getOrDefault(ClassType.LECTURE),
+                    classType = p.getOrElse(3) { "Лекция" },
                     colorHex = p.getOrElse(4) { "#0061A4" }
                 )
             } else null
@@ -305,7 +300,7 @@ class ScheduleRepository(
         }
         _subjectPresetsFlow.value = current
         val serialized = current.joinToString(";;;") {
-            "${it.title}|||${it.professor}|||${it.classroom}|||${it.classType.name}|||${it.colorHex}"
+            "${it.title}|||${it.professor}|||${it.classroom}|||${it.classType}|||${it.colorHex}"
         }
         prefs.edit().putString("saved_subject_presets", serialized).apply()
     }
@@ -353,7 +348,7 @@ class ScheduleRepository(
             sb.append("Пар нет. Отдыхаем! 🎉")
         } else {
             classes.sortedBy { it.startTime }.forEachIndexed { index, slot ->
-                sb.append("${index + 1}. [${slot.formattedTimeSpan}] ${slot.subjectTitle} (${slot.classType.displayName})\n")
+                sb.append("${index + 1}. [${slot.formattedTimeSpan}] ${slot.subjectTitle} (${slot.classType})\n")
                 sb.append("   📍 ${slot.classroom} • 👤 ${slot.professor}\n")
             }
         }
@@ -365,7 +360,7 @@ class ScheduleRepository(
             ClassSlot(
                 id = UUID.randomUUID().toString(),
                 subjectTitle = "Алгоритмы и структуры данных",
-                classType = ClassType.LECTURE,
+                classType = "Лекция",
                 professor = "проф. Соколов А.В.",
                 classroom = "Ауд. 402 (Главный корпус)",
                 dayOfWeek = java.time.LocalDate.now().dayOfWeek,
@@ -379,7 +374,7 @@ class ScheduleRepository(
             ClassSlot(
                 id = UUID.randomUUID().toString(),
                 subjectTitle = "Математический анализ",
-                classType = ClassType.SEMINAR,
+                classType = "Семинар",
                 professor = "доц. Петрова Е.И.",
                 classroom = "Ауд. 215",
                 dayOfWeek = java.time.LocalDate.now().dayOfWeek,
@@ -393,7 +388,7 @@ class ScheduleRepository(
             ClassSlot(
                 id = UUID.randomUUID().toString(),
                 subjectTitle = "Базы данных (SQL / NoSQL)",
-                classType = ClassType.LAB,
+                classType = "Лабораторная",
                 professor = "преп. Васильев И.Д.",
                 classroom = "Компьютерный класс 3",
                 dayOfWeek = DayOfWeek.TUESDAY,

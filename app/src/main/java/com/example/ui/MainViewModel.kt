@@ -124,7 +124,6 @@ class MainViewModel(
     init {
         viewModelScope.launch {
             currentClassStatus.collect { status ->
-                repository.applyAutoSilentMode(status)
             }
         }
     }
@@ -306,10 +305,6 @@ class MainViewModel(
         }
     }
 
-    fun setAutoSilentMode(enabled: Boolean) {
-        repository.setAutoSilentMode(enabled)
-        _toastMessage.value = if (enabled) "Авто-беззвучный режим включен" else "Авто-беззвучный режим выключен"
-    }
 
     fun updateBellSlots(slots: List<BellSlot>) {
         repository.saveBellSlots(slots)

@@ -1,0 +1,11 @@
+                    // Share Button
+                    IconButton(
+                        onClick = { showShareDialog = true },
+                        modifier = Modifier.testTag("btn_share_schedule")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode,
+                            contentDescription = "Поделиться расписанием (QR / Ссылка)",
+                            tint = BentoPrimary
+                        )
+                    }

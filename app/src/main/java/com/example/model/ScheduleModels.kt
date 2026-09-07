@@ -4,12 +4,6 @@ import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-enum class ClassType(val displayName: String) {
-    LECTURE("Лекция"),
-    SEMINAR("Семинар"),
-    LAB("Лабораторная"),
-    PRACTICUM("Практика")
-}
 
 enum class WeekParity(val displayName: String) {
     ALL("Все недели"),
@@ -81,7 +75,6 @@ data class UserProfile(
     val parityMode: WeekParityMode = WeekParityMode.AUTO,
     val notificationsEnabled: Boolean = true,
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
-    val autoSilentMode: Boolean = false,
     val bellPreset: BellSchedulePreset = BellSchedulePreset.STANDARD,
     val bellSlots: List<BellSlot> = standardBellSchedule
 ) {
@@ -99,7 +92,7 @@ data class UserProfile(
 data class ClassSlot(
     val id: String,
     val subjectTitle: String,
-    val classType: ClassType,
+    val classType: String = "Лекция",
     val professor: String,
     val classroom: String,
     val dayOfWeek: DayOfWeek,
@@ -148,7 +141,7 @@ data class SubjectPreset(
     val title: String,
     val professor: String = "",
     val classroom: String = "",
-    val classType: ClassType = ClassType.LECTURE,
+    val classType: String = "Лекция",
     val colorHex: String = "#0061A4"
 )
 

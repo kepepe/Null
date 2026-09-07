@@ -160,10 +160,6 @@ fun TimetableScreen(
                             letterSpacing = (-0.5).sp
                         )
                     )
-                    Text(
-                        text = "Пары, звонки, окна и счётчик пропусков",
-                        style = MaterialTheme.typography.bodySmall.copy(color = BentoOnSurfaceVariant)
-                    )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -179,6 +175,17 @@ fun TimetableScreen(
                         )
                     }
 
+                    // Share Button
+                    IconButton(
+                        onClick = { showShareDialog = true },
+                        modifier = Modifier.testTag("btn_share_schedule")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode,
+                            contentDescription = "Поделиться расписанием (QR / Ссылка)",
+                            tint = BentoPrimary
+                        )
+                    }
                     // Bells Schedule Modal Trigger
                     IconButton(
                         onClick = { showBellsSheet = true },
@@ -190,22 +197,11 @@ fun TimetableScreen(
                             tint = BentoPrimary
                         )
                     }
-
-                    // Share schedule (QR and link) trigger
-                    IconButton(
-                        onClick = { showShareDialog = true },
-                        modifier = Modifier.testTag("btn_share_schedule")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.QrCode,
-                            contentDescription = "Поделиться расписанием (QR / Ссылка)",
-                            tint = BentoPrimary
-                        )
-                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
 
             // Overall Attendance & Skips Indicator Card
             Surface(
@@ -469,11 +465,12 @@ fun TimetableClassCard(
     onDecrementSkip: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val (typeBg, typeFg) = when (slot.classType) {
-        ClassType.LECTURE -> BentoPrimaryContainer to BentoOnPrimaryContainer
-        ClassType.SEMINAR -> BentoPurpleContainer to BentoOnPurpleContainer
-        ClassType.LAB -> BentoCoralContainer to BentoOnCoralContainer
-        ClassType.PRACTICUM -> BentoGreenContainer to BentoSuccessGreen
+    val (typeBg, typeFg) = when {
+        slot.classType.lowercase().contains("лек") -> BentoPrimaryContainer to BentoOnPrimaryContainer
+        slot.classType.lowercase().contains("сем") -> BentoPurpleContainer to BentoOnPurpleContainer
+        slot.classType.lowercase().contains("лаб") -> BentoCoralContainer to BentoOnCoralContainer
+        slot.classType.lowercase().contains("прак") -> BentoGreenContainer to BentoSuccessGreen
+        else -> BentoPrimaryContainer to BentoOnPrimaryContainer
     }
 
     val defaultTagColor = BentoPrimary
@@ -536,7 +533,7 @@ fun TimetableClassCard(
                         color = typeBg
                     ) {
                         Text(
-                            text = slot.classType.displayName,
+                            text = slot.classType,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold,

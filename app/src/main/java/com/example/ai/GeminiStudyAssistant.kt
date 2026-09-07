@@ -25,7 +25,7 @@ object GeminiStudyAssistant {
   "deadlineDaysFromNow": 7, // целое число дней от сегодняшнего дня до дедлайна, либо null если не указано
   "deadlineNote": "Текстовое пояснение срока (например: 'К следующей среде', 'До 23:59')",
   "notes": "Подробные требования, номера задач, ссылки или указания к выполнению"
-}
+
 """
 
     suspend fun parseNotesToTasks(
@@ -150,5 +150,24 @@ object GeminiStudyAssistant {
             )
         }
         return list
+    }
+
+    suspend fun chatWithBot(
+        chatHistory: String,
+        newQuestion: String,
+        bitmap: Bitmap? = null
+    ): Result<String> = withContext(Dispatchers.Default) {
+        val prompt = buildString {
+            append("История переписки:\n")
+            append(chatHistory)
+            append("\n\nНовое сообщение студента: $newQuestion")
+            append("\n\n(Учитывай историю при ответе, но отвечай только на новое сообщение. Если прикреплено фото, анализируй его вместе с вопросом.)")
+        }
+
+        GeminiApiClient.generateRawContent(
+            prompt = prompt,
+            bitmap = bitmap,
+            systemInstruction = "Ты — дружелюбный и компетентный университетский ИИ-тьютор. ВАЖНОЕ ПРАВИЛО: В самом начале общения обязательно спроси у студента, по какому предмету или теме ему нужна помощь. НЕ давай подробных ответов, пока студент не укажет предмет. После того как предмет известен, помогай студенту, объясняй формулы, код или теорию наглядно и без лишней 'воды'. Отвечай на русском языке."
+        )
     }
 }

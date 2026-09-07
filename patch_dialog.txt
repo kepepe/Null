@@ -2,7 +2,6 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -347,9 +346,9 @@ fun AddEditClassDialog(
                                 ) {
                                     OutlinedTextField(
                                         value = setting.startTime,
-                                        onValueChange = { newValue ->
-                                            daySettings = daySettings.map { if (it.day == setting.day) it.copy(startTime = newValue) else it }
-                                             
+                                        onValueChange = {
+                                            daySettings = daySettings.map { if (it.day == setting.day) it.copy(startTime = it.startTime) else it }
+                                            setting.startTime = it 
                                         },
                                         label = { Text("НАЧАЛО") },
                                         leadingIcon = { Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(20.dp)) },
@@ -360,9 +359,9 @@ fun AddEditClassDialog(
                                     )
                                     OutlinedTextField(
                                         value = setting.endTime,
-                                        onValueChange = { newValue ->
-                                            daySettings = daySettings.map { if (it.day == setting.day) it.copy(endTime = newValue) else it }
-                                             
+                                        onValueChange = {
+                                            daySettings = daySettings.map { if (it.day == setting.day) it.copy(endTime = it.endTime) else it }
+                                            setting.endTime = it 
                                         },
                                         label = { Text("КОНЕЦ") },
                                         modifier = Modifier.weight(1f),
